@@ -1,0 +1,1191 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Landlord Stress Firewall Dashboard</title>
+  <style>
+    :root {
+      --bg: #0b1220;
+      --panel: #0f1b30;
+      --accent: #35d2c5;
+      --accent-2: #7c5dff;
+      --text: #e8edf6;
+      --muted: #8ca0c2;
+      --border: #1e2a44;
+      --danger: #ff6b6b;
+      --warn: #ffb347;
+      --bubble-tenant: #11223d;
+      --bubble-landlord: #15304f;
+      --bubble-ai: #1a1f3a;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
+      background: radial-gradient(circle at 20% 20%, #112040 0, #0b1220 45%), radial-gradient(circle at 80% 0%, #182a4c 0, #0b1220 55%);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      padding: 12px;
+    }
+    h1 { margin: 0 0 8px; letter-spacing: 0.5px; }
+    .grid {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(3, 1fr);
+    }
+    @media (max-width: 1100px) {
+      .grid { grid-template-columns: 1fr; }
+      .panel { min-height: auto; }
+    }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      min-height: 70vh;
+    }
+    .panel h2 { margin: 0; font-size: 16px; display: flex; align-items: center; gap: 8px; }
+    label { display: block; font-size: 13px; margin-bottom: 4px; color: var(--muted); }
+    input, textarea, select {
+      width: 100%;
+      background: #0c172a;
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px;
+      font-size: 14px;
+    }
+    textarea { resize: vertical; }
+    button {
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      color: #0a111f;
+      border: none;
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .stack { display: flex; flex-direction: column; gap: 8px; }
+    .row { display: flex; gap: 8px; }
+    .row > * { flex: 1; }
+    pre {
+      background: #0c172a;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px;
+      overflow: auto;
+      max-height: 280px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .pill { padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); font-size: 12px; }
+    .muted { color: var(--muted); font-size: 13px; }
+    .toast {
+      position: fixed; right: 16px; bottom: 16px;
+      background: #0c172a; border: 1px solid var(--border); border-radius: 10px;
+      padding: 10px 12px; box-shadow: 0 8px 30px rgba(0,0,0,0.35);
+      opacity: 0; transform: translateY(10px); transition: 0.2s ease;
+    }
+    .toast.show { opacity: 1; transform: translateY(0); }
+    .chip { padding: 2px 6px; border: 1px solid var(--border); border-radius: 6px; font-size: 12px; color: var(--muted); }
+    .badge { padding: 2px 8px; border-radius: 8px; font-size: 12px; font-weight: 700; display: inline-block; }
+    .sev-critical { background: rgba(255,107,107,0.18); color: #ff9a9a; }
+    .sev-high { background: rgba(255,179,71,0.18); color: #ffc680; }
+    .sev-normal { background: rgba(53,210,197,0.18); color: #8cf2e6; }
+    .sev-low { background: rgba(140,160,194,0.18); color: #c7d5ec; }
+    .ticket-board { border: 1px solid var(--border); border-radius: 10px; padding: 10px; background: rgba(255,255,255,0.02); }
+    .ticket-cards { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+    .ticket-card { flex: 1; min-width: 120px; border: 1px solid var(--border); border-radius: 8px; padding: 8px; background: #0c172a; }
+    .ticket-label { font-size: 12px; color: var(--muted); }
+    .ticket-count { font-size: 24px; font-weight: 800; }
+    .ticket-columns { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+    .ticket-columns h4 { margin: 0 0 6px; font-size: 14px; }
+    .ticket-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+    .ticket-list li { border: 1px solid var(--border); border-radius: 8px; padding: 6px; background: #0c172a; cursor: pointer; }
+    .ticket-list li div { font-size: 12px; color: var(--muted); }
+    .chat-feed {
+      flex: 1;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 8px;
+      background: #0c172a;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      min-height: 240px;
+    }
+    #chatFeed { max-height: 320px; }
+    .bubble {
+      max-width: 90%;
+      padding: 8px 10px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      position: relative;
+      display: inline-block;
+    }
+    .bubble-tenant { background: var(--bubble-tenant); align-self: flex-start; }
+    .bubble-landlord { background: var(--bubble-landlord); align-self: flex-end; }
+    .bubble-ai { background: var(--bubble-ai); align-self: flex-end; }
+    .bubble small { color: var(--muted); display: block; margin-top: 4px; }
+    .section-title { display: flex; justify-content: space-between; align-items: center; }
+    .dual { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .assistant-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+    .ghost-btn {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 8px 12px;
+      border-radius: 999px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .ghost-btn.on {
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      color: #041222;
+    }
+    .assistant-callout {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border: 1px dashed var(--border);
+      border-radius: 10px;
+      padding: 8px 12px;
+      background: rgba(53,210,197,0.05);
+      gap: 12px;
+    }
+    .assistant-sections { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+    .assistant-chat { border: 1px solid var(--border); border-radius: 10px; padding: 12px; background: rgba(255,255,255,0.02); display: flex; flex-direction: column; gap: 10px; }
+    .assistant-chat h3 { margin: 0; font-size: 14px; letter-spacing: 0.5px; text-transform: uppercase; }
+    .assistant-feed { min-height: 150px; max-height: 260px; }
+    .assistant-feed .bubble { width: 100%; }
+    .assistant-feed .assistant-actions { margin-top: 6px; display: flex; gap: 6px; flex-wrap: wrap; }
+    .assistant-feed .assistant-actions button {
+      background: transparent;
+      color: var(--accent);
+      border: 1px solid var(--accent);
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .assistant-feed .assistant-actions button:hover { background: rgba(53,210,197,0.15); }
+    .assistant-analysis { font-size: 13px; line-height: 1.4; }
+    .assistant-draft {
+      margin-top: 6px;
+      padding: 8px;
+      border: 1px dashed var(--border);
+      border-radius: 8px;
+      background: #0f1c32;
+      font-size: 13px;
+      line-height: 1.4;
+    }
+    .assistant-draft strong { display: block; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); margin-bottom: 4px; }
+    .autopilot-zone { border: 1px solid var(--border); border-radius: 10px; padding: 10px; background: rgba(10,17,31,0.6); }
+    .autopilot-log { max-height: 180px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+    .autopilot-log .log-entry { border: 1px solid var(--border); border-radius: 8px; padding: 8px; background: #0c172a; }
+    .autopilot-log .log-entry div { font-size: 11px; color: var(--muted); }
+    .autopilot-log .log-entry strong { display: inline-block; margin-top: 4px; letter-spacing: 0.5px; }
+    .autopilot-log .log-entry p { margin: 4px 0 0; font-size: 13px; color: var(--text); }
+    .pill-on { background: rgba(53,210,197,0.18); color: var(--accent); border-color: var(--accent); }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Landlord Stress Firewall</h1>
+    <div class="muted">Tenant chat · Raw LLM text · Landlord review + send</div>
+  </header>
+
+  <div class="grid">
+    <section class="panel" id="tenant-panel">
+      <div class="section-title">
+        <h2>Tenant Chat</h2>
+        <span class="pill" id="selectedStatus">New request</span>
+      </div>
+      <div class="stack">
+        <div class="row">
+          <div>
+            <label for="conversationSelect">Conversation</label>
+            <select id="conversationSelect"></select>
+          </div>
+          <div>
+            <label for="tenantId">Tenant</label>
+            <select id="tenantId"><option value="">(select)</option></select>
+          </div>
+          <div>
+            <label for="unitId">Unit</label>
+            <select id="unitId"><option value="">(select)</option></select>
+          </div>
+        </div>
+        <div class="chat-feed" id="chatFeed">(no conversation)</div>
+        <div>
+          <label for="tenantMessage">Message</label>
+          <textarea id="tenantMessage" placeholder="Describe the issue or reply" rows="3"></textarea>
+        </div>
+        <div class="row">
+          <button id="sendTenant">Send as tenant</button>
+          <button id="startNew">Start new request</button>
+        </div>
+        <div class="muted" id="tenantStatus"></div>
+      </div>
+    </section>
+
+    <section class="panel" id="raw-panel">
+      <h2>Raw Text + Details</h2>
+      <div class="stack">
+        <div class="row">
+          <div>
+            <label>Triage</label>
+            <div id="triageSummary" class="muted">(none)</div>
+          </div>
+          <div>
+            <label>Meta</label>
+            <div class="muted" id="metaInfo">(none)</div>
+          </div>
+        </div>
+        <label>LLM raw triage</label>
+        <pre id="rawModel">(select a request)</pre>
+        <label>LLM drafted reply</label>
+        <pre id="rawDraft">(select a request)</pre>
+        <div class="ticket-board" id="ticketBoard">
+          <div class="ticket-cards">
+            <div class="ticket-card">
+              <div class="ticket-label">Pending</div>
+              <div class="ticket-count" id="pendingCount">0</div>
+            </div>
+            <div class="ticket-card">
+              <div class="ticket-label">Backlog</div>
+              <div class="ticket-count" id="backlogCount">0</div>
+            </div>
+            <div class="ticket-card">
+              <div class="ticket-label">Resolved</div>
+              <div class="ticket-count" id="resolvedCount">0</div>
+            </div>
+          </div>
+          <div class="ticket-columns">
+            <div>
+              <h4>Pending</h4>
+              <ul class="ticket-list" id="pendingList"><li class="muted">None</li></ul>
+            </div>
+            <div>
+              <h4>Backlog</h4>
+              <ul class="ticket-list" id="backlogList"><li class="muted">None</li></ul>
+            </div>
+            <div>
+              <h4>Resolved</h4>
+              <ul class="ticket-list" id="resolvedList"><li class="muted">None</li></ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" id="assistant-panel">
+      <div class="assistant-header">
+        <div>
+          <h2>Assistant Console</h2>
+          <div class="muted" id="autopilotStatus">Autopilot disabled</div>
+        </div>
+        <button id="autopilotToggle" class="ghost-btn">Enable autopilot</button>
+      </div>
+      <div class="stack">
+        <div class="row">
+          <div class="stack">
+            <label for="reviewSelect">Request</label>
+            <select id="reviewSelect"></select>
+          </div>
+          <div class="stack">
+            <label>Status</label>
+            <div class="row">
+              <button id="markInProgress">Mark in-progress</button>
+              <button id="markResolved">Mark resolved</button>
+            </div>
+          </div>
+        </div>
+        <div class="assistant-callout">
+          <div>
+            <div class="muted" style="font-size:12px;">Live triage severity</div>
+            <span class="pill" id="autopilotMode">manual</span>
+          </div>
+          <div style="text-align:right; font-size:12px; color:var(--muted);">
+            Autopilot only replies to low/normal severity tickets. Manual review stays in control.
+          </div>
+        </div>
+        <div class="stack" style="border:1px solid var(--border); border-radius:10px; padding:12px; background:rgba(255,255,255,0.02); gap:14px;">
+          <div class="section-title">
+            <h3 style="margin:0">Assistant + Draft</h3>
+            <span class="pill" id="reviewBadge">manual</span>
+          </div>
+          <div class="assistant-chat">
+            <div class="section-title">
+              <strong>Assistant Chat</strong>
+              <button class="ghost-btn" id="assistantClear">Clear</button>
+            </div>
+            <div class="chat-feed assistant-feed" id="assistantFeed">
+              <div class="muted">Ask the assistant for tone shifts, summaries, or follow-up ideas.</div>
+            </div>
+            <textarea id="assistantPrompt" rows="3" placeholder="e.g. 'Make it friendlier' or 'Suggest a follow-up question'"></textarea>
+            <div class="row" style="align-items:center">
+              <button id="assistantSend">Ask assistant</button>
+              <label class="muted" style="display:flex;align-items:center;gap:6px;">
+                <input type="checkbox" id="assistantUseDraft" checked />
+                Include current draft context
+              </label>
+            </div>
+          </div>
+          <div class="stack">
+            <label>Draft to tenant</label>
+            <textarea id="landlordDraft" rows="8" placeholder="Use the assistant output or type your own"></textarea>
+            <div class="row">
+              <button id="useDraft">Load AI draft</button>
+              <button id="sendLandlord">Send to tenant</button>
+            </div>
+            <div class="row" style="justify-content:flex-end">
+              <button class="ghost-btn" id="manualApprove" style="flex:0 0 auto">Mark manual draft ready</button>
+            </div>
+            <div class="muted" id="sendGateHint">Use Add to draft or mark the manual draft ready to enable sending.</div>
+            <label for="refineInstructions">Refinement instructions</label>
+            <textarea id="refineInstructions" rows="4" placeholder="Tell the assistant how to tweak the current draft"></textarea>
+            <div class="row" style="align-items:center">
+              <button id="refineDraftBtn">Ask assistant to refine</button>
+              <label class="muted" style="display:flex;align-items:center;gap:6px;">
+                <input type="checkbox" id="useLandlordEdits" />
+                Use my current edits as base
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="stack autopilot-zone">
+        <div class="section-title">
+          <h3 style="margin:0">Autopilot journal</h3>
+          <span class="pill" id="autopilotStatePill">manual</span>
+        </div>
+        <div id="autopilotLog" class="autopilot-log">
+          <div class="muted">No autopilot events yet.</div>
+        </div>
+      </div>
+      <hr />
+      <div class="stack">
+        <h3 style="margin:0">Directory</h3>
+        <div class="dual">
+          <div class="stack">
+            <label>Create Tenant</label>
+            <input id="newTenantId" placeholder="Tenant ID (optional)" />
+            <input id="newTenantName" placeholder="Tenant name" />
+            <input id="newTenantPhone" placeholder="Phone (optional)" />
+            <input id="newTenantEmail" placeholder="Email (optional)" />
+            <button id="createTenant">Create tenant</button>
+          </div>
+          <div class="stack">
+            <label>Create Unit</label>
+            <input id="newUnitId" placeholder="Unit ID (optional)" />
+            <input id="newUnitLabel" placeholder="Label" />
+            <input id="newUnitAddress" placeholder="Address" />
+            <button id="createUnit">Create unit</button>
+          </div>
+        </div>
+        <div class="row">
+          <button id="loadTenants">Load tenants</button>
+          <button id="loadUnits">Load units</button>
+        </div>
+        <div class="row">
+          <pre id="tenantsBox">(none)</pre>
+          <pre id="unitsBox">(none)</pre>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script>
+    const statusEl = document.getElementById("tenantStatus");
+    const chatFeed = document.getElementById("chatFeed");
+    const rawModel = document.getElementById("rawModel");
+    const rawDraft = document.getElementById("rawDraft");
+    const triageSummary = document.getElementById("triageSummary");
+    const metaInfo = document.getElementById("metaInfo");
+    const landlordDraft = document.getElementById("landlordDraft");
+    const refineInstructions = document.getElementById("refineInstructions");
+    const useLandlordEdits = document.getElementById("useLandlordEdits");
+    const selectedStatus = document.getElementById("selectedStatus");
+    const toastEl = document.getElementById("toast");
+    const ticketBoard = document.getElementById("ticketBoard");
+    const pendingCount = document.getElementById("pendingCount");
+    const backlogCount = document.getElementById("backlogCount");
+    const resolvedCount = document.getElementById("resolvedCount");
+    const pendingList = document.getElementById("pendingList");
+    const backlogList = document.getElementById("backlogList");
+    const resolvedList = document.getElementById("resolvedList");
+    const autopilotToggle = document.getElementById("autopilotToggle");
+    const autopilotStatus = document.getElementById("autopilotStatus");
+    const autopilotLog = document.getElementById("autopilotLog");
+    const autopilotMode = document.getElementById("autopilotMode");
+    const autopilotStatePill = document.getElementById("autopilotStatePill");
+    const assistantFeed = document.getElementById("assistantFeed");
+    const assistantPrompt = document.getElementById("assistantPrompt");
+    const assistantSend = document.getElementById("assistantSend");
+    const assistantUseDraft = document.getElementById("assistantUseDraft");
+    const assistantClear = document.getElementById("assistantClear");
+    const reviewBadge = document.getElementById("reviewBadge");
+    const sendLandlordBtn = document.getElementById("sendLandlord");
+    const sendGateHint = document.getElementById("sendGateHint");
+    const manualApproveBtn = document.getElementById("manualApprove");
+
+    const tenantSelect = document.getElementById("tenantId");
+    const unitSelect = document.getElementById("unitId");
+    const conversationSelect = document.getElementById("conversationSelect");
+    const reviewSelect = document.getElementById("reviewSelect");
+
+    const tenantsBox = document.getElementById("tenantsBox");
+    const unitsBox = document.getElementById("unitsBox");
+
+    let cachedTenants = [];
+    let cachedUnits = [];
+    let cachedItems = [];
+    let selectedId = null;
+    const assistantThreads = {};
+    const autopilotSeenEntries = new Set();
+    let autopilotHydrated = false;
+    const UI_SAFE_AUTOPILOT_SEVERITIES = new Set(["low", "normal"]);
+    const assistantReadyByItem = {};
+    const assistantDraftOverrides = {};
+    let assistantReady = false;
+    let suppressDraftWatcher = false;
+
+    async function fetchItem(id) {
+      if (!id) return null;
+      try {
+        const res = await fetch(`/maintenance/${id}`);
+        const data = await res.json();
+        if (!res.ok) return null;
+        return data.item;
+      } catch (err) {
+        return null;
+      }
+    }
+
+    function showToast(msg, isError = false) {
+      toastEl.textContent = msg;
+      toastEl.style.borderColor = isError ? "var(--danger)" : "var(--border)";
+      toastEl.classList.add("show");
+      setTimeout(() => toastEl.classList.remove("show"), 2000);
+    }
+
+    function severityBadge(sev) {
+      const cls = {
+        critical: "sev-critical",
+        high: "sev-high",
+        normal: "sev-normal",
+        low: "sev-low",
+      }[sev?.toLowerCase() || "normal"] || "sev-normal";
+      return `<span class="badge ${cls}">${sev || "normal"}</span>`;
+    }
+
+    function optionLabel(item) {
+      const snippet = (item.message || "").slice(0, 50);
+      return `[${item.status}] ${item.unitId || "unit?"} · ${snippet}`;
+    }
+
+    function updateSendButtonState() {
+      if (!sendLandlordBtn) return;
+      const hasDraft = Boolean(landlordDraft?.value?.trim());
+      const canSend = Boolean(selectedId && assistantReady && hasDraft);
+      sendLandlordBtn.disabled = !canSend;
+      sendLandlordBtn.title = canSend
+        ? "Send the approved draft to the tenant"
+        : "Use Add to draft or mark the manual draft ready first";
+      if (manualApproveBtn) {
+        const canManualApprove = Boolean(selectedId && hasDraft);
+        manualApproveBtn.disabled = !canManualApprove;
+        manualApproveBtn.title = canManualApprove
+          ? "Confirm the current draft is reviewed"
+          : "Select a request and add draft text first";
+      }
+      if (sendGateHint) {
+        if (!selectedId) {
+          sendGateHint.textContent = "Select a request to draft a reply.";
+        } else if (!assistantReady) {
+          sendGateHint.textContent = "Use Add to draft or mark the manual draft ready to unlock sending.";
+        } else if (!hasDraft) {
+          sendGateHint.textContent = "Draft is empty.";
+        } else {
+          sendGateHint.textContent = "Draft approved — ready to send.";
+        }
+        sendGateHint.style.color = canSend ? "var(--accent)" : "var(--muted)";
+      }
+    }
+
+    function markAssistantReady(state) {
+      if (!selectedId) return;
+      assistantReadyByItem[selectedId] = Boolean(state);
+      assistantReady = assistantReadyByItem[selectedId];
+      updateSendButtonState();
+    }
+
+    function clearAssistantReadyState(id = selectedId) {
+      if (!id) {
+        assistantReady = false;
+        updateSendButtonState();
+        return;
+      }
+      assistantReadyByItem[id] = false;
+      delete assistantDraftOverrides[id];
+      if (id === selectedId) {
+        assistantReady = false;
+        updateSendButtonState();
+      }
+    }
+
+    function syncAssistantReadyState() {
+      assistantReady = Boolean(selectedId && assistantReadyByItem[selectedId]);
+      updateSendButtonState();
+    }
+
+    updateSendButtonState();
+
+    function applyAssistantDraft(text) {
+      if (!text) return;
+      suppressDraftWatcher = true;
+      landlordDraft.value = text;
+      setTimeout(() => {
+        suppressDraftWatcher = false;
+      }, 0);
+      if (selectedId) {
+        assistantDraftOverrides[selectedId] = text;
+      }
+      markAssistantReady(true);
+    }
+
+    function markManualDraftReady() {
+      if (!selectedId) return showToast("Select a request first", true);
+      const text = landlordDraft?.value?.trim();
+      if (!text) return showToast("Draft is empty", true);
+      assistantDraftOverrides[selectedId] = landlordDraft.value;
+      markAssistantReady(true);
+      showToast("Manual draft marked ready");
+    }
+
+    function syncSelects() {
+      const options = cachedItems.map((i) => `<option value="${i.id}">${optionLabel(i)}</option>`).join("");
+      const base = `<option value="">New request</option>` + options;
+      conversationSelect.innerHTML = base;
+      reviewSelect.innerHTML = base;
+      conversationSelect.value = selectedId || "";
+      reviewSelect.value = selectedId || "";
+    }
+
+    function getSelectedItem() {
+      return cachedItems.find((i) => i.id === selectedId) || null;
+    }
+
+    function renderChat(item) {
+      if (!item) {
+        chatFeed.innerHTML = "<div class=\"muted\">Start a new request to chat.</div>";
+        selectedStatus.textContent = "New request";
+        selectedStatus.className = "pill";
+        return;
+      }
+      selectedStatus.textContent = `${item.status}`;
+      selectedStatus.className = `pill`;
+      const log = Array.isArray(item.chatLog) ? item.chatLog : [];
+      const fallback = log.length ? [] : [
+        { role: "tenant", content: item.message, createdAt: item.createdAt },
+        item.aiDraft?.draft ? { role: "ai", content: item.aiDraft.draft, createdAt: item.createdAt } : null,
+      ].filter(Boolean);
+      const combined = [...log, ...fallback];
+      if (!combined.length) {
+        chatFeed.innerHTML = "<div class=\"muted\">No messages yet.</div>";
+        return;
+      }
+      chatFeed.innerHTML = combined
+        .sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0))
+        .map((entry) => {
+          const cls = entry.role === "tenant" ? "bubble-tenant" : entry.role === "ai" ? "bubble-ai" : "bubble-landlord";
+          const when = entry.createdAt ? new Date(entry.createdAt).toLocaleString() : "";
+          return `<div class="bubble ${cls}">${entry.content}<small>${entry.role} • ${when}</small></div>`;
+        })
+        .join("");
+      chatFeed.scrollTop = chatFeed.scrollHeight;
+    }
+
+    function renderRaw(item) {
+      if (!item) {
+        rawModel.textContent = "(select a request)";
+        rawDraft.textContent = "(select a request)";
+        triageSummary.textContent = "(none)";
+        metaInfo.textContent = "(none)";
+        return;
+      }
+      triageSummary.innerHTML = `${severityBadge(item.triageJson?.classification?.severity)} <span class="chip">${item.triageJson?.classification?.category || "general"}</span>`;
+      metaInfo.textContent = `Priority ${item.priority} · ${item.tenantId || "no tenant"} · ${item.unitId || "no unit"}`;
+      rawModel.textContent = item.triageJson?.rawModelText || JSON.stringify(item.triageJson || {}, null, 2) || "(none)";
+      rawDraft.textContent = item.aiDraft?.draft || "(no draft saved)";
+    }
+
+    function renderReview(item) {
+      if (!item) {
+        landlordDraft.value = "";
+        if (reviewBadge) {
+          reviewBadge.textContent = "manual";
+          reviewBadge.className = "pill";
+        }
+        return;
+      }
+      const hasOverride = Object.prototype.hasOwnProperty.call(assistantDraftOverrides, item.id);
+      const text = hasOverride ? assistantDraftOverrides[item.id] : item.landlordReply ?? item.aiDraft?.draft ?? "";
+      landlordDraft.value = text;
+      if (reviewBadge) {
+        reviewBadge.textContent = item.autopilotEnabled ? "autopilot" : "manual";
+        reviewBadge.className = item.autopilotEnabled ? "pill pill-on" : "pill";
+      }
+    }
+
+    function ensureAssistantThread(id) {
+      if (!id) return [];
+      if (!assistantThreads[id]) assistantThreads[id] = [];
+      return assistantThreads[id];
+    }
+
+    function pushAssistantEntry(id, entry) {
+      if (!id) return null;
+      const thread = ensureAssistantThread(id);
+      const record = {
+        id: entry.id || `advisor-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        role: entry.role,
+        content: entry.content,
+        createdAt: entry.createdAt || new Date().toISOString(),
+        meta: entry.meta || null,
+      };
+      thread.push(record);
+      return record;
+    }
+
+    function renderAssistantFeed() {
+      if (!assistantFeed) return;
+      if (!selectedId) {
+        assistantFeed.innerHTML = '<div class="muted">Select a request to chat with the assistant.</div>';
+        return;
+      }
+      const thread = ensureAssistantThread(selectedId);
+      if (!thread.length) {
+        assistantFeed.innerHTML = '<div class="muted">Ask the assistant for tone shifts, TL;DRs, or follow-up ideas.</div>';
+        return;
+      }
+      assistantFeed.innerHTML = thread
+        .map((entry) => {
+          const cls = entry.role === "assistant" ? "bubble-ai" : "bubble-landlord";
+          const label = entry.role === "assistant" ? "Assistant" : "You";
+          const when = entry.createdAt ? new Date(entry.createdAt).toLocaleString() : "";
+          const variant = entry.meta?.kind || (entry.meta?.draftText ? "reply" : null);
+          let body = entry.content;
+          if (entry.role === "assistant") {
+            if (variant === "reply") {
+              body = `<div class="assistant-draft"><strong>Ready reply</strong>${entry.content}</div>`;
+            } else {
+              body = `<div class="assistant-analysis">${entry.content}</div>`;
+            }
+          }
+          const actions = entry.role === "assistant" && variant === "reply"
+            ? `<div class="assistant-actions"><button class="apply-suggestion" data-entry-id="${entry.id}">Add to draft</button></div>`
+            : "";
+          return `<div class="bubble ${cls}">${body}${actions}<small>${label} • ${when}</small></div>`;
+        })
+        .join("");
+      assistantFeed.scrollTop = assistantFeed.scrollHeight;
+    }
+
+    function handleAutopilotNotifications(entries) {
+      if (!Array.isArray(entries)) return;
+      entries.forEach((entry) => {
+        if (!entry || !entry.id) return;
+        const isNew = !autopilotSeenEntries.has(entry.id);
+        if (isNew) {
+          if (autopilotHydrated && entry.type === "auto_reply") {
+            showToast("Assistant auto-sent the latest reply");
+          }
+          autopilotSeenEntries.add(entry.id);
+        }
+      });
+      if (!autopilotHydrated) {
+        autopilotHydrated = true;
+      }
+    }
+
+    function renderAutopilot(item) {
+      if (!autopilotToggle) return;
+      if (!item) {
+        autopilotToggle.disabled = true;
+        autopilotToggle.classList.remove("on");
+        autopilotToggle.textContent = "Enable autopilot";
+        if (autopilotStatus) autopilotStatus.textContent = "Select a request to manage autopilot";
+        if (autopilotMode) autopilotMode.textContent = "manual";
+        if (autopilotStatePill) {
+          autopilotStatePill.textContent = "manual";
+          autopilotStatePill.className = "pill";
+        }
+        if (autopilotLog) autopilotLog.innerHTML = '<div class="muted">No autopilot data.</div>';
+        return;
+      }
+      const enabled = Boolean(item.autopilotEnabled);
+      const severityRaw = (item.triageJson?.classification?.severity || "unknown").toString();
+      const severity = severityRaw.toLowerCase();
+      const severityAllowed = UI_SAFE_AUTOPILOT_SEVERITIES.has(severity);
+      const canToggleOn = selectedId && (enabled || severityAllowed);
+      autopilotToggle.disabled = !canToggleOn;
+      autopilotToggle.classList.toggle("on", enabled);
+      autopilotToggle.textContent = enabled ? "Disable autopilot" : "Enable autopilot";
+      autopilotToggle.title = severityAllowed ? "Autopilot replies to low/normal severity tickets" : "Autopilot blocked for this severity";
+      if (autopilotStatus) {
+        if (!severityAllowed && !enabled) {
+          autopilotStatus.textContent = `Autopilot blocked for ${severity || "unknown"} severity`;
+        } else {
+          const stateText = item.autopilotStatus || (enabled ? "idle" : "manual");
+          autopilotStatus.textContent = enabled ? `Autopilot ${stateText}` : "Autopilot disabled";
+        }
+      }
+      if (autopilotMode) autopilotMode.textContent = severityRaw;
+      if (autopilotStatePill) {
+        autopilotStatePill.textContent = enabled ? "auto" : "manual";
+        autopilotStatePill.className = enabled ? "pill pill-on" : "pill";
+      }
+      const log = Array.isArray(item.autopilotLog) ? item.autopilotLog : [];
+      if (autopilotLog) {
+        if (!log.length) {
+          autopilotLog.innerHTML = '<div class="muted">No autopilot events yet.</div>';
+        } else {
+          autopilotLog.innerHTML = log
+            .slice(-6)
+            .reverse()
+            .map((entry) => {
+              const when = entry.createdAt ? new Date(entry.createdAt).toLocaleString() : "";
+              const status = entry.status ? `<span class="chip">${entry.status}</span>` : "";
+              return `<div class="log-entry"><div>${when}</div><strong>${entry.type || "event"}</strong> ${status}<p>${entry.message}</p></div>`;
+            })
+            .join("");
+        }
+      }
+      handleAutopilotNotifications(log);
+    }
+
+    function renderAll() {
+      syncSelects();
+      const item = getSelectedItem();
+      renderChat(item);
+      renderRaw(item);
+      renderReview(item);
+      renderAssistantFeed();
+      renderAutopilot(item);
+      renderTicketBoard(cachedItems);
+      syncAssistantReadyState();
+    }
+
+    function populateSelect(select, items, placeholder) {
+      const current = select.value;
+      select.innerHTML = `<option value="">${placeholder}</option>` + items.map((t) => `<option value="${t.id}">${t.id}${t.name ? " · " + t.name : ""}</option>`).join("");
+      if (current) select.value = current;
+    }
+
+    async function loadTenants() {
+      const res = await fetch("/admin/tenants");
+      const data = await res.json();
+      cachedTenants = data.items || [];
+      tenantsBox.textContent = JSON.stringify(cachedTenants, null, 2);
+      populateSelect(tenantSelect, cachedTenants, "Tenant (optional)");
+    }
+
+    async function loadUnits() {
+      const res = await fetch("/admin/units");
+      const data = await res.json();
+      cachedUnits = data.items || [];
+      unitsBox.textContent = JSON.stringify(cachedUnits, null, 2);
+      populateSelect(unitSelect, cachedUnits, "Unit (optional)");
+    }
+
+    async function refreshList() {
+      const res = await fetch("/maintenance/list");
+      const data = await res.json();
+      cachedItems = data.items || [];
+      if (!selectedId && cachedItems.length) {
+        selectedId = cachedItems[0].id;
+      }
+      renderAll();
+    }
+
+    async function postMaintenance(asNew = false) {
+      const tenantMessage = document.getElementById("tenantMessage").value.trim();
+      const tenantId = tenantSelect.value || undefined;
+      const unitId = unitSelect.value || undefined;
+      if (!tenantMessage) {
+        statusEl.textContent = "Message required";
+        statusEl.style.color = "var(--danger)";
+        return null;
+      }
+      statusEl.textContent = "Sending...";
+      statusEl.style.color = "var(--muted)";
+      try {
+        const res = await fetch("/maintenance", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ tenantMessage, tenantId, unitId }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Request failed");
+        statusEl.textContent = "Submitted. Maintenance ID: " + (data.maintenanceId || "(none)");
+        statusEl.style.color = "var(--accent)";
+        showToast("Request submitted");
+        if (data.maintenanceId) {
+          selectedId = data.maintenanceId;
+          assistantThreads[data.maintenanceId] = [];
+        }
+        document.getElementById("tenantMessage").value = "";
+        await refreshList();
+        return data.maintenanceId || null;
+      } catch (err) {
+        statusEl.textContent = err.message;
+        statusEl.style.color = "var(--danger)";
+        showToast(err.message, true);
+        return null;
+      }
+    }
+
+    async function postChat(role) {
+      const content = document.getElementById(role === "landlord" ? "landlordDraft" : "tenantMessage").value.trim();
+      if (!content) return showToast("Message required", true);
+      if (role === "landlord") {
+        if (!selectedId) return showToast("Select a request first", true);
+        if (!assistantReady) return showToast("Apply an assistant suggestion before sending", true);
+      }
+      let id = selectedId;
+      if (!id) {
+        id = await postMaintenance(true);
+        if (!id) return null;
+      }
+      const res = await fetch(`/maintenance/${id}/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role, content }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showToast(data.error || "Chat failed", true);
+        return null;
+      }
+      const fresh = await fetchItem(id);
+      mergeUpdatedItem(fresh || data.item);
+      if (role !== "landlord") document.getElementById("tenantMessage").value = "";
+      if (role === "landlord") clearAssistantReadyState(id);
+      showToast("Message sent");
+      renderAll();
+      return data.item?.id || null;
+    }
+
+    async function refineAiDraft() {
+      if (!selectedId) return showToast("Select a request", true);
+      const instructions = (refineInstructions?.value || "").trim();
+      if (!instructions) return showToast("Add instructions for the AI", true);
+      const baseText = useLandlordEdits?.checked ? landlordDraft.value.trim() : undefined;
+      try {
+        const res = await fetch(`/maintenance/${selectedId}/refine`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ instructions, baseText }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Refine failed");
+        if (data.maintenance) mergeUpdatedItem(data.maintenance);
+        if (data.draft?.draft) landlordDraft.value = data.draft.draft;
+        if (refineInstructions) refineInstructions.value = "";
+        if (useLandlordEdits) useLandlordEdits.checked = false;
+        clearAssistantReadyState(selectedId);
+        showToast("Draft refined");
+        renderAll();
+      } catch (err) {
+        showToast(err.message || "Refine failed", true);
+      }
+    }
+
+    async function sendAssistantPrompt() {
+      if (!selectedId) return showToast("Select a request", true);
+      const prompt = (assistantPrompt?.value || "").trim();
+      if (!prompt) return showToast("Add a question for the assistant", true);
+      assistantPrompt.value = "";
+      clearAssistantReadyState(selectedId);
+      pushAssistantEntry(selectedId, { role: "landlord", content: prompt });
+      renderAssistantFeed();
+      if (assistantSend) {
+        assistantSend.disabled = true;
+        assistantSend.textContent = "Thinking...";
+      }
+      try {
+        const payload = { instructions: prompt };
+        const baseDraft = landlordDraft?.value?.trim();
+        if (assistantUseDraft?.checked && baseDraft) {
+          payload.baseText = baseDraft;
+        }
+        const res = await fetch(`/maintenance/${selectedId}/advisor`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Assistant request failed");
+        const suggestionPayload = data?.suggestion;
+        let analysisText = "";
+        let draftedReply = "";
+        let suggestionId = suggestionPayload?.generatedAt || `advisor-${Date.now()}`;
+        if (suggestionPayload && typeof suggestionPayload === "object") {
+          analysisText = suggestionPayload.analysis || suggestionPayload.suggestion || "";
+          draftedReply = suggestionPayload.reply || suggestionPayload.draft || "";
+        } else if (typeof suggestionPayload === "string") {
+          analysisText = suggestionPayload;
+        }
+        if (analysisText) {
+          pushAssistantEntry(selectedId, {
+            role: "assistant",
+            content: analysisText,
+            createdAt: suggestionPayload?.generatedAt,
+            id: `${suggestionId}-analysis`,
+            meta: { kind: "analysis" },
+          });
+        }
+        if (draftedReply) {
+          pushAssistantEntry(selectedId, {
+            role: "assistant",
+            content: draftedReply,
+            createdAt: suggestionPayload?.generatedAt,
+            id: `${suggestionId}-reply`,
+            meta: { draftText: draftedReply, kind: "reply" },
+          });
+        }
+        if (data?.maintenance) mergeUpdatedItem(data.maintenance);
+        if (!analysisText && !draftedReply) {
+          pushAssistantEntry(selectedId, {
+            role: "assistant",
+            content: "Couldn't come up with a fresh angle—try rephrasing your ask.",
+            createdAt: suggestionPayload?.generatedAt,
+            id: `${suggestionId}-fallback`,
+            meta: { kind: "analysis" },
+          });
+        }
+        if (draftedReply) {
+          showToast("Assistant prepared a reply — click Add to draft");
+        } else {
+          showToast("Assistant shared feedback");
+        }
+        renderAssistantFeed();
+      } catch (err) {
+        showToast(err.message || "Assistant request failed", true);
+      } finally {
+        if (assistantSend) {
+          assistantSend.disabled = false;
+          assistantSend.textContent = "Ask assistant";
+        }
+      }
+    }
+
+    function clearAssistantThread() {
+      if (!selectedId) return showToast("Select a request", true);
+      assistantThreads[selectedId] = [];
+      clearAssistantReadyState(selectedId);
+      renderAssistantFeed();
+    }
+
+    function mergeUpdatedItem(item) {
+      if (!item) return;
+      const idx = cachedItems.findIndex((i) => i.id === item.id);
+      if (idx >= 0) {
+        cachedItems[idx] = item;
+      } else {
+        cachedItems.unshift(item);
+      }
+    }
+
+    function renderTicketBoard(items) {
+      const pending = items.filter((i) => i.status === "OPEN");
+      const backlog = items.filter((i) => i.status === "IN_PROGRESS");
+      const resolved = items.filter((i) => i.status === "RESOLVED");
+      pendingCount.textContent = pending.length;
+      backlogCount.textContent = backlog.length;
+      resolvedCount.textContent = resolved.length;
+      renderTicketList(pendingList, pending);
+      renderTicketList(backlogList, backlog);
+      renderTicketList(resolvedList, resolved);
+    }
+
+    function renderTicketList(node, list) {
+      if (!node) return;
+      if (!list.length) {
+        node.innerHTML = '<li class="muted">None</li>';
+        return;
+      }
+      node.innerHTML = list.slice(0, 6)
+        .map((item) => {
+          const summary = (item.message || "").slice(0, 60);
+          return `<li data-id="${item.id}"><strong>${item.unitId || "Unit?"}</strong><div>${summary}</div></li>`;
+        })
+        .join("");
+    }
+
+    async function updateStatus(status) {
+      const id = selectedId;
+      if (!id) return showToast("Select a request", true);
+      const res = await fetch(`/admin/maintenance/${id}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      const data = await res.json();
+      if (!res.ok) return showToast("Status update failed", true);
+      mergeUpdatedItem(data.maintenance);
+      const fresh = await fetchItem(id);
+      if (fresh) mergeUpdatedItem(fresh);
+      showToast(`Status -> ${status}`);
+      renderAll();
+    }
+
+    async function toggleAutopilot(enabled) {
+      const id = selectedId;
+      if (!id) return showToast("Select a request", true);
+      try {
+        const res = await fetch(`/maintenance/${id}/autopilot`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ enabled, runNow: true }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Autopilot toggle failed");
+        if (data.maintenance) mergeUpdatedItem(data.maintenance);
+        renderAll();
+        showToast(enabled ? "Autopilot enabled" : "Autopilot disabled");
+      } catch (err) {
+        showToast(err.message || "Autopilot toggle failed", true);
+      }
+    }
+
+    async function createTenant() {
+      const id = document.getElementById("newTenantId").value.trim() || undefined;
+      const name = document.getElementById("newTenantName").value.trim();
+      const phone = document.getElementById("newTenantPhone").value.trim() || undefined;
+      const email = document.getElementById("newTenantEmail").value.trim() || undefined;
+      if (!name) return showToast("Tenant name required", true);
+      const res = await fetch("/admin/tenants", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, name, phone, email }),
+      });
+      const data = await res.json();
+      if (!res.ok) return showToast("Tenant create failed", true);
+      showToast("Tenant created: " + (data.tenant?.id || "unknown"));
+      await loadTenants();
+    }
+
+    async function createUnit() {
+      const id = document.getElementById("newUnitId").value.trim() || undefined;
+      const label = document.getElementById("newUnitLabel").value.trim();
+      const address = document.getElementById("newUnitAddress").value.trim();
+      if (!label || !address) return showToast("Label and address required", true);
+      const res = await fetch("/admin/units", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, label, address }),
+      });
+      const data = await res.json();
+      if (!res.ok) return showToast("Unit create failed", true);
+      showToast("Unit created: " + (data.unit?.id || "unknown"));
+      await loadUnits();
+    }
+
+    // Event wiring
+    landlordDraft?.addEventListener("input", () => {
+      if (suppressDraftWatcher) return;
+      clearAssistantReadyState(selectedId);
+    });
+    document.getElementById("sendTenant").onclick = () => postChat("tenant");
+    document.getElementById("startNew").onclick = () => { selectedId = null; renderAll(); postMaintenance(true); };
+    document.getElementById("sendLandlord").onclick = () => postChat("landlord");
+    document.getElementById("useDraft").onclick = () => {
+      const item = getSelectedItem();
+      if (!item || !item.aiDraft?.draft) return showToast("No AI draft", true);
+      landlordDraft.value = item.aiDraft.draft;
+      clearAssistantReadyState(selectedId);
+    };
+    document.getElementById("refineDraftBtn").onclick = refineAiDraft;
+    document.getElementById("markResolved").onclick = () => updateStatus("RESOLVED");
+    document.getElementById("markInProgress").onclick = () => updateStatus("IN_PROGRESS");
+    if (autopilotToggle) {
+      autopilotToggle.onclick = () => {
+        const item = getSelectedItem();
+        const next = !item?.autopilotEnabled;
+        toggleAutopilot(next);
+      };
+    }
+    assistantSend?.addEventListener("click", sendAssistantPrompt);
+    assistantPrompt?.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+        event.preventDefault();
+        sendAssistantPrompt();
+      }
+    });
+    assistantClear?.addEventListener("click", clearAssistantThread);
+    manualApproveBtn?.addEventListener("click", markManualDraftReady);
+    assistantFeed?.addEventListener("click", (event) => {
+      const applyBtn = event.target.closest(".apply-suggestion");
+      if (!applyBtn || !selectedId) return;
+      const entryId = applyBtn.getAttribute("data-entry-id");
+      const thread = ensureAssistantThread(selectedId);
+      const entry = thread.find((node) => node.id === entryId);
+      if (!entry) return;
+      const draftText = entry.meta?.draftText || entry.content;
+      if (!draftText) return showToast("No ready draft to apply", true);
+      applyAssistantDraft(draftText);
+      showToast("Assistant draft applied");
+    });
+    conversationSelect.onchange = async (e) => {
+      selectedId = e.target.value || null;
+      if (selectedId) {
+        const fresh = await fetchItem(selectedId);
+        if (fresh) mergeUpdatedItem(fresh);
+      }
+      renderAll();
+    };
+    reviewSelect.onchange = async (e) => {
+      selectedId = e.target.value || null;
+      if (selectedId) {
+        const fresh = await fetchItem(selectedId);
+        if (fresh) mergeUpdatedItem(fresh);
+      }
+      renderAll();
+    };
+    ticketBoard?.addEventListener("click", async (e) => {
+      const target = e.target.closest("li[data-id]");
+      if (!target) return;
+      selectedId = target.getAttribute("data-id");
+      if (selectedId) {
+        const fresh = await fetchItem(selectedId);
+        if (fresh) mergeUpdatedItem(fresh);
+      }
+      renderAll();
+    });
+
+    document.getElementById("createTenant").onclick = createTenant;
+    document.getElementById("createUnit").onclick = createUnit;
+    document.getElementById("loadTenants").onclick = loadTenants;
+    document.getElementById("loadUnits").onclick = loadUnits;
+
+    refreshList();
+    loadTenants();
+    loadUnits();
+  </script>
+</body>
+</html>

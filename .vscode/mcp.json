@@ -1,0 +1,9 @@
+{
+  "servers": {
+    "browser": {
+      "url": "${MCP_BROWSER_SERVER:-http://localhost:5173}",
+      "type": "web"
+    }
+  },
+  "notes": "Configure the MCP browser server address via MCP_BROWSER_SERVER in your .env."
+}

@@ -1,0 +1,113 @@
+generator client {
+	provider = "prisma-client-js"
+}
+
+datasource db {
+	provider = "postgresql"
+	url      = env("DATABASE_URL")
+}
+
+enum MaintenanceStatus {
+	OPEN
+	IN_PROGRESS
+	RESOLVED
+	CANCELLED
+}
+
+enum Priority {
+	CRITICAL
+	HIGH
+	NORMAL
+	LOW
+}
+
+enum UtilityType {
+	INTERNET
+	WATER_GAS
+	HYDRO
+}
+
+model Tenant {
+	id          String               @id @default(cuid())
+	name        String
+	phone       String?              @unique
+	email       String?              @unique
+	units       UnitTenant[]
+	requests    MaintenanceRequest[]
+	utilityBills UtilityBill[]
+	createdAt   DateTime             @default(now())
+	updatedAt   DateTime             @updatedAt
+}
+
+model Unit {
+	id            String               @id @default(cuid())
+	label         String
+	address       String
+	tenants       UnitTenant[]
+	requests      MaintenanceRequest[]
+	utilityBills  UtilityBill[]
+	createdAt     DateTime             @default(now())
+	updatedAt     DateTime             @updatedAt
+}
+
+model UnitTenant {
+	id        String   @id @default(cuid())
+	tenant    Tenant   @relation(fields: [tenantId], references: [id])
+	tenantId  String
+	unit      Unit     @relation(fields: [unitId], references: [id])
+	unitId    String
+	startDate DateTime @default(now())
+	endDate   DateTime?
+}
+
+model MaintenanceRequest {
+	id             String            @id @default(cuid())
+	tenant         Tenant?           @relation(fields: [tenantId], references: [id])
+	tenantId       String?
+	unit           Unit?             @relation(fields: [unitId], references: [id])
+	unitId         String?
+	message        String
+	status         MaintenanceStatus @default(OPEN)
+	statusChangedAt DateTime          @default(now())
+	priority       Priority          @default(NORMAL)
+	category       String?
+	triageJson     Json?
+	aiDraft        Json?
+	autopilotEnabled Boolean          @default(false)
+	autopilotStatus String?
+	autopilotLog  Json?
+	chatLog        Json?
+	landlordReply  String?
+	utilityAnomaly Boolean           @default(false)
+	utilityNotes   String?
+	mcpTaskId      String?
+	createdAt      DateTime          @default(now())
+	updatedAt      DateTime          @updatedAt
+	utilityBills   UtilityBill[]
+
+	@@index([status])
+}
+
+model UtilityBill {
+	id               String       @id @default(cuid())
+	utilityType      UtilityType
+	amountCents      Int
+	currency         String        @default("CAD")
+	usageAmount      Float?
+	usageUnit        String?
+	billingPeriodStart DateTime
+	billingPeriodEnd DateTime
+	statementUrl     String?
+	portalUsername   String?
+	anomalyFlag      Boolean      @default(false)
+	anomalyNotes     String?
+	rawData          Json?
+	tenant           Tenant?      @relation(fields: [tenantId], references: [id])
+	tenantId         String?
+	unit             Unit?        @relation(fields: [unitId], references: [id])
+	unitId           String?
+	maintenance      MaintenanceRequest? @relation(fields: [maintenanceId], references: [id])
+	maintenanceId    String?
+	createdAt        DateTime     @default(now())
+	updatedAt        DateTime     @updatedAt
+}
