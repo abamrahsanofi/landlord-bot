@@ -1,6 +1,7 @@
 const express = require("express");
 const agentService = require("../services/agentService").default || require("../services/agentService");
 const repo = require("../services/repository").default || require("../services/repository");
+const whatsappService = require("../services/whatsappService").default || require("../services/whatsappService");
 const { z } = require("zod");
 
 const maintenanceSchema = z.object({
@@ -92,22 +93,48 @@ async function maybeRunAutopilot({ record, triage, aiDraft, reason = "tenant_mes
     return { ran: false };
   }
 
+  const tenantId = record.tenantId;
+  const tenant = tenantId ? await repo.getTenantById(tenantId) : null;
+  const to = tenant?.phone;
+  if (!tenant || !to) {
+    await repo.logAutopilotEvent({
+      id: record.id,
+      type: "skip",
+      message: "Autopilot blocked: missing tenant phone",
+      status: "missing_contact",
+      meta: { ...meta, tenantId },
+    });
+    return { ran: false };
+  }
+
+  const sent = await whatsappService.sendWhatsAppText({ to, text });
+  if (!sent.ok) {
+    await repo.logAutopilotEvent({
+      id: record.id,
+      type: "error",
+      message: "Autopilot send failed",
+      status: "send_failed",
+      meta: { ...meta, to, error: sent.error, response: sent.response },
+    });
+    return { ran: false };
+  }
+
   await repo.appendChatMessage({
     id: record.id,
     role: "ai",
     content: text,
-    meta: { autopilot: true, severity, reason },
+    meta: { autopilot: true, severity, reason, to },
     setLandlordReply: text,
   });
   await repo.logAutopilotEvent({
     id: record.id,
     type: "auto_reply",
-    message: "Autopilot sent reply using latest draft",
+    message: "Autopilot sent reply via WhatsApp",
     status: "auto_replied",
-    meta: { ...meta, length: text.length },
+    meta: { ...meta, to, length: text.length },
   });
 
-  return { ran: true };
+  return { ran: true, to };
 }
 
 const router = express.Router();

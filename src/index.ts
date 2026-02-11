@@ -20,6 +20,11 @@ app.use(morgan("dev"));
 
 app.use(express.static(path.join(process.cwd(), "public")));
 
+// Serve dashboard at /dashboard for convenience
+app.get("/dashboard", (_req, res) => {
+  res.sendFile(path.join(process.cwd(), "public", "dashboard.html"));
+});
+
 app.use("/webhooks", webhooksRouter);
 app.use("/api", apiRouter);
 app.use("/admin", adminRouter);

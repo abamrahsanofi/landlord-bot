@@ -37,6 +37,13 @@ npm run dev                 # PORT=3000 by default
 # open http://localhost:3000
 ```
 
+If you use Docker Compose for Evolution API + Postgres:
+```bash
+docker compose up -d
+```
+Evolution API will be at http://localhost:8080
+All Evolution-related variables are read from `.env`.
+
 If port 3000 is busy, start with `PORT=3001 npm run dev`.
 
 ## Dashboard primer
@@ -44,6 +51,23 @@ If port 3000 is busy, start with `PORT=3001 npm run dev`.
 - Raw triage: view severity/category, raw model output, draft text.
 - Assistant console: advisor chat (analysis + “Ready reply” bubble), Apply to Draft, manual “Mark draft ready” button to unlock Send.
 - Autopilot: only runs on low/normal severity; logs decisions in the journal.
+
+## WhatsApp (Evolution API)
+Inbound webhook: `POST /webhooks/whatsapp/evolution`
+
+Behavior:
+- Only registered tenants (or group participants who are registered tenants) are replied to; unknown numbers are ignored.
+- Group chats: at least one participant must be a registered tenant; replies stay in the group chat (no 1:1 fanout).
+- Non-critical tenant messages are batched: 5-minute intake window and 1-hour cooldown per tenant to avoid back-to-back replies; critical keywords (fire, water leak, gas leak, no power/heat) bypass the delay.
+- If sender matches a landlord number (direct chat), message is appended to the latest open request and forwarded on approval.
+- Registered contractors (by phone) are allowed; their messages are forwarded to landlords but no auto-reply is sent to the contractor.
+
+Required env:
+- `EVOLUTION_API_BASE_URL`, `EVOLUTION_API_TOKEN`
+- `EVOLUTION_API_SEND_PATH` (e.g. `/message/sendText/{session}`)
+- `EVOLUTION_API_SESSION`
+- `LANDLORD_WHATSAPP_NUMBERS`
+Set these in `.env` (no separate env file needed).
 
 ## Deployment notes
 - Ensure Postgres and Vertex AI credentials are available in the runtime environment.

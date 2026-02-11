@@ -1,4 +1,4 @@
-const { PrismaClient, MaintenanceStatus } = require('../node_modules/@prisma/client');
+const { PrismaClient, MaintenanceStatus } = require('@prisma/client');
 
 const prisma = new PrismaClient();
 

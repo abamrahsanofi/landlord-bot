@@ -12,5 +12,59 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+  evolution-postgres:
+    image: postgres:15
+    container_name: evolution-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${EVOLUTION_POSTGRES_DATABASE}
+      POSTGRES_USER: ${EVOLUTION_POSTGRES_USERNAME}
+      POSTGRES_PASSWORD: ${EVOLUTION_POSTGRES_PASSWORD}
+    ports:
+      - "5433:5432"
+    volumes:
+      - evolution_pgdata:/var/lib/postgresql/data
+  evolution-redis:
+    image: redis:latest
+    container_name: evolution-redis
+    restart: unless-stopped
+    command: redis-server --port 6379 --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - evolution_redis:/data
+  evolution-api:
+    image: evoapicloud/evolution-api:latest
+    container_name: evolution-api
+    platform: linux/arm64
+    restart: unless-stopped
+    depends_on:
+      - evolution-redis
+      - evolution-postgres
+    entrypoint: ["/bin/sh", "-c", ". ./Docker/scripts/deploy_database.sh && npm run start:prod"]
+    ports:
+      - "8080:8080"
+    volumes:
+      - evolution_instances:/evolution/instances
+      - ./docker/evolution-api/.env:/evolution/.env:ro
+    environment:
+      SERVER_PORT: 8080
+      AUTHENTICATION_API_KEY: ${EVOLUTION_API_TOKEN}
+      WEBHOOK_URL: ${APP_PUBLIC_URL}/webhooks/whatsapp/evolution
+      INSTANCE_NAME: ${EVOLUTION_API_SESSION}
+      DATABASE_PROVIDER: postgresql
+      DATABASE_URL: postgresql://${EVOLUTION_POSTGRES_USERNAME}:${EVOLUTION_POSTGRES_PASSWORD}@evolution-postgres:5432/${EVOLUTION_POSTGRES_DATABASE}?schema=public
+  evolution-frontend:
+    image: caddy:alpine
+    container_name: evolution-frontend
+    restart: unless-stopped
+    ports:
+      - "3001:80"
+    volumes:
+      - ./docker/evolution-manager/html/html:/srv:ro
+    command: ["caddy", "file-server", "--root", "/srv", "--listen", ":80"]
 volumes:
   pgdata:
+  evolution_pgdata:
+  evolution_instances:
+  evolution_redis:

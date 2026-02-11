@@ -1,73 +1,89 @@
 import { db } from "../config/database";
-import { Prisma, Priority, MaintenanceStatus } from "@prisma/client";
+import { Prisma, Priority, MaintenanceStatus, UtilityType } from "@prisma/client";
 
 const isDbEnabled = Boolean(process.env.DATABASE_URL);
 
 type ChatEntry = {
   role: "tenant" | "ai" | "landlord";
   content: string;
-  createdAt: string;
+  createdAt?: string;
   meta?: Record<string, unknown>;
 };
 
-type AiDraftPayload = {
-  draft?: string;
-  skillLoaded?: boolean;
-  generatedAt?: string;
-  source?: string;
-  instructions?: string;
-  baseDraftExcerpt?: string;
-  notes?: string;
-};
-
-type AutopilotLogEntry = {
-  id: string;
-  type: "system" | "config" | "auto_reply" | "skip" | "error";
+type AutopilotEntry = {
+  type: string;
   message: string;
   status?: string;
-  createdAt: string;
   meta?: Record<string, unknown>;
+  createdAt: string;
 };
 
-type AutopilotEntryInput = Omit<AutopilotLogEntry, "id" | "createdAt">;
+type TriagePayload = Record<string, unknown>;
+type AiDraftPayload = { draft?: string; [key: string]: unknown };
+type UtilityCheckPayload = { anomalyFound?: boolean; notes?: string; [key: string]: unknown };
 
-function normalizeAutopilotLog(raw: unknown): AutopilotLogEntry[] {
-  if (!Array.isArray(raw)) return [];
-  return raw.filter((entry) => Boolean(entry)).map((entry) => entry as AutopilotLogEntry);
+function normalizeChatLog(log: unknown): ChatEntry[] {
+  if (!Array.isArray(log)) return [];
+  return log
+    .map((entry) => {
+      if (!entry || typeof entry !== "object") return null;
+      const role = (entry as any).role;
+      const content = (entry as any).content;
+      if (!content || (role !== "tenant" && role !== "ai" && role !== "landlord")) return null;
+      return {
+        role,
+        content,
+        createdAt: typeof (entry as any).createdAt === "string" ? (entry as any).createdAt : new Date().toISOString(),
+        meta: (entry as any).meta && typeof (entry as any).meta === "object" ? (entry as any).meta : undefined,
+      } as ChatEntry;
+    })
+    .filter(Boolean) as ChatEntry[];
 }
 
-function buildAutopilotEntry(input: AutopilotEntryInput): AutopilotLogEntry {
+function normalizeAutopilotLog(log: unknown): AutopilotEntry[] {
+  if (!Array.isArray(log)) return [];
+  return log
+    .map((entry) => {
+      if (!entry || typeof entry !== "object") return null;
+      const type = (entry as any).type;
+      const message = (entry as any).message;
+      if (!type || !message) return null;
+      return {
+        type,
+        message,
+        status: typeof (entry as any).status === "string" ? (entry as any).status : undefined,
+        meta: (entry as any).meta && typeof (entry as any).meta === "object" ? (entry as any).meta : undefined,
+        createdAt: typeof (entry as any).createdAt === "string" ? (entry as any).createdAt : new Date().toISOString(),
+      } as AutopilotEntry;
+    })
+    .filter(Boolean) as AutopilotEntry[];
+}
+
+function buildAutopilotEntry(params: { type: string; message: string; status?: string; meta?: Record<string, unknown> }): AutopilotEntry {
   return {
-    id: `auto-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    type: params.type,
+    message: params.message,
+    status: params.status,
+    meta: params.meta,
     createdAt: new Date().toISOString(),
-    ...input,
   };
-}
-
-function severityToPriority(severity?: string): Priority {
-  const map: Record<string, Priority> = {
-    critical: Priority.CRITICAL,
-    high: Priority.HIGH,
-    normal: Priority.NORMAL,
-    low: Priority.LOW,
-  };
-  return (severity && map[severity.toLowerCase()]) || Priority.NORMAL;
 }
 
 export async function createMaintenanceRequest(params: {
   tenantId?: string;
   unitId?: string;
   message: string;
-  triage?: {
-    classification?: { severity?: string; category?: string };
-    summary?: string;
-    rawModelText?: string;
-  };
-  aiDraft?: AiDraftPayload | null;
+  status?: MaintenanceStatus;
+  priority?: Priority;
+  category?: string;
+  triage?: TriagePayload;
+  aiDraft?: AiDraftPayload;
+  autopilotEnabled?: boolean;
+  utilityCheck?: UtilityCheckPayload;
+  mcpTaskId?: string;
 }) {
   if (!isDbEnabled) return null;
   try {
-    const priority = severityToPriority(params.triage?.classification?.severity);
     const chatLog: ChatEntry[] = [
       {
         role: "tenant",
@@ -75,166 +91,125 @@ export async function createMaintenanceRequest(params: {
         createdAt: new Date().toISOString(),
       },
     ];
-    const autopilotLog = [
-      buildAutopilotEntry({
-        type: "system",
-        message: "Request created",
-        status: "manual_review",
-      }),
-    ];
-
-    const data = {
-      tenantId: params.tenantId ?? null,
-      unitId: params.unitId ?? null,
-      message: params.message,
-      statusChangedAt: new Date(),
-      priority,
-      category: params.triage?.classification?.category,
-      triageJson: params.triage ? params.triage : undefined,
-      aiDraft: (params.aiDraft as Prisma.InputJsonValue) ?? undefined,
-      autopilotStatus: "manual_review",
-      autopilotLog: autopilotLog as Prisma.InputJsonValue,
-      chatLog: chatLog as Prisma.InputJsonValue,
-    };
-
-    try {
-      return await db.maintenanceRequest.create({ data });
-    } catch (err) {
-      // If tenant/unit IDs don’t exist, retry without them so flow continues during testing.
-      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2003") {
-        const fallback = { ...data, tenantId: null, unitId: null };
-        return await db.maintenanceRequest.create({ data: fallback });
-      }
-      throw err;
-    }
+    return await db.maintenanceRequest.create({
+      data: {
+        tenantId: params.tenantId,
+        unitId: params.unitId,
+        message: params.message,
+        status: params.status || MaintenanceStatus.OPEN,
+        priority: params.priority || Priority.NORMAL,
+        category: params.category,
+        triageJson: params.triage as Prisma.InputJsonValue,
+        aiDraft: params.aiDraft as Prisma.InputJsonValue,
+        autopilotEnabled: Boolean(params.autopilotEnabled),
+        autopilotStatus: params.autopilotEnabled ? "idle" : undefined,
+        utilityAnomaly: Boolean(params.utilityCheck?.anomalyFound),
+        utilityNotes: params.utilityCheck?.notes,
+        chatLog: chatLog as Prisma.InputJsonValue,
+        mcpTaskId: params.mcpTaskId,
+      },
+    });
   } catch (err) {
     // eslint-disable-next-line no-console
-    console.warn("maintenance create skipped", err);
+    console.warn("maintenance create failed", err);
     return null;
   }
 }
 
-export async function updateMaintenanceUtility(params: {
-  maintenanceId?: string;
-  utilityCheck?: {
-    anomalyFound?: boolean;
-    notes?: string;
-    mcpResponse?: unknown;
-  };
-}) {
+export async function updateMaintenanceUtility(params: { maintenanceId: string; utilityCheck?: UtilityCheckPayload }) {
   if (!isDbEnabled || !params.maintenanceId) return null;
   try {
-    const record = await db.maintenanceRequest.update({
+    return await db.maintenanceRequest.update({
       where: { id: params.maintenanceId },
       data: {
         utilityAnomaly: Boolean(params.utilityCheck?.anomalyFound),
         utilityNotes: params.utilityCheck?.notes,
       },
     });
-    return record;
   } catch (err) {
     // eslint-disable-next-line no-console
-    console.warn("maintenance utility update skipped", err);
+    console.warn("maintenance utility update failed", err);
     return null;
   }
 }
 
 export async function logUtilityBill(params: {
   maintenanceId?: string;
-  tenantId?: string;
   unitId?: string;
-  utilityType: string;
-  amountCents?: number;
-  currency?: string;
-  anomalyFlag?: boolean;
-  anomalyNotes?: string;
-  statementUrl?: string;
-  portalUsername?: string;
-  rawData?: unknown;
+  tenantId?: string;
+  bill: {
+    utilityType: UtilityType;
+    amountCents: number;
+    currency?: string;
+    billingPeriodStart?: Date;
+    billingPeriodEnd?: Date;
+    statementUrl?: string;
+    portalUsername?: string;
+    anomalyFlag?: boolean;
+    anomalyNotes?: string;
+    rawData?: unknown;
+  };
 }) {
   if (!isDbEnabled) return null;
   try {
-    const record = await db.utilityBill.create({
+    return await db.utilityBill.create({
       data: {
-        utilityType: params.utilityType as any,
-        amountCents: params.amountCents ?? 0,
-        currency: params.currency || "CAD",
-        anomalyFlag: Boolean(params.anomalyFlag),
-        anomalyNotes: params.anomalyNotes,
-        statementUrl: params.statementUrl,
-        portalUsername: params.portalUsername,
-        rawData: params.rawData as any,
+        utilityType: params.bill.utilityType,
+        amountCents: params.bill.amountCents,
+        currency: params.bill.currency || "CAD",
+        billingPeriodStart: params.bill.billingPeriodStart || new Date(),
+        billingPeriodEnd: params.bill.billingPeriodEnd || new Date(),
+        statementUrl: params.bill.statementUrl,
+        portalUsername: params.bill.portalUsername,
+        anomalyFlag: Boolean(params.bill.anomalyFlag),
+        anomalyNotes: params.bill.anomalyNotes,
+        rawData: params.bill.rawData as Prisma.InputJsonValue,
         maintenanceId: params.maintenanceId,
-        tenantId: params.tenantId,
         unitId: params.unitId,
-        billingPeriodStart: new Date(),
-        billingPeriodEnd: new Date(),
+        tenantId: params.tenantId,
       },
     });
-    return record;
   } catch (err) {
     // eslint-disable-next-line no-console
-    console.warn("utility bill log skipped", err);
+    console.warn("log utility bill failed", err);
     return null;
   }
 }
 
-export async function updateMaintenanceStatus(params: { id: string; status: MaintenanceStatus }) {
-  if (!isDbEnabled || !params.id) return null;
-  try {
-    return await db.maintenanceRequest.update({
-      where: { id: params.id },
-      data: { status: params.status, statusChangedAt: new Date() },
-    });
-  } catch (err) {
-    // eslint-disable-next-line no-console
-    console.warn("maintenance status update skipped", err);
-    return null;
-  }
-}
-
-export async function updateMaintenanceAnalysis(params: {
-  id: string;
-  triage?: Record<string, unknown> | null;
-  aiDraft?: AiDraftPayload | null;
+export async function listMaintenance(params: {
+  limit?: number;
+  status?: string | string[];
+  unitId?: string;
+  tenantId?: string;
 }) {
-  if (!isDbEnabled || !params.id) return null;
+  if (!isDbEnabled) return [];
+  const limit = params.limit && params.limit > 0 ? params.limit : 100;
+  const statusList = Array.isArray(params.status)
+    ? params.status
+    : typeof params.status === "string"
+    ? params.status.split(",").map((s) => s.trim()).filter(Boolean)
+    : undefined;
+  const where: Prisma.MaintenanceRequestWhereInput = {};
+  if (statusList?.length) where.status = { in: statusList as MaintenanceStatus[] };
+  if (params.unitId) where.unitId = params.unitId;
+  if (params.tenantId) where.tenantId = params.tenantId;
   try {
-    return await db.maintenanceRequest.update({
-      where: { id: params.id },
-      data: {
-        triageJson: params.triage ? (params.triage as Prisma.InputJsonValue) : undefined,
-        aiDraft: params.aiDraft ? (params.aiDraft as Prisma.InputJsonValue) : undefined,
-      },
-    });
-  } catch (err) {
-    // eslint-disable-next-line no-console
-    console.warn("maintenance analysis update skipped", err);
-    return null;
-  }
-}
-
-export async function listMaintenance(limit = 50) {
-  if (!isDbEnabled) {
-    return { dbEnabled: false, items: [] };
-  }
-  try {
-    const items = await db.maintenanceRequest.findMany({
+    return await db.maintenanceRequest.findMany({
+      where,
       orderBy: { createdAt: "desc" },
       take: limit,
     });
-    return { dbEnabled: true, items };
   } catch (err) {
     // eslint-disable-next-line no-console
     console.warn("list maintenance failed", err);
-    return { dbEnabled: true, items: [] };
+    return [];
   }
 }
 
-export async function getMaintenanceById(id: string) {
+export async function getMaintenanceById(id?: string) {
   if (!isDbEnabled || !id) return null;
   try {
-    return await db.maintenanceRequest.findUnique({ where: { id } });
+    return await db.maintenanceRequest.findUnique({ where: { id }, include: { utilityBills: true } });
   } catch (err) {
     // eslint-disable-next-line no-console
     console.warn("get maintenance failed", err);
@@ -251,32 +226,111 @@ export async function appendChatMessage(params: {
 }) {
   if (!isDbEnabled || !params.id) return null;
   try {
-    const current = await db.maintenanceRequest.findUnique({ where: { id: params.id } });
-    if (!current) return null;
-    const existingLog = Array.isArray(current.chatLog)
-      ? (current.chatLog as unknown as ChatEntry[])
-      : [];
-
-    const entry: ChatEntry = {
+    const record = await db.maintenanceRequest.findUnique({ where: { id: params.id } });
+    if (!record) return null;
+    const log = normalizeChatLog(record.chatLog);
+    log.push({
       role: params.role,
       content: params.content,
       meta: params.meta,
       createdAt: new Date().toISOString(),
-    };
-
-    const chatLog = [...existingLog, entry];
-
+    });
     return await db.maintenanceRequest.update({
       where: { id: params.id },
       data: {
-        chatLog: chatLog as Prisma.InputJsonValue,
-        landlordReply: params.setLandlordReply ?? current.landlordReply,
+        chatLog: log as Prisma.InputJsonValue,
+        landlordReply: params.setLandlordReply ?? record.landlordReply,
       },
     });
   } catch (err) {
     // eslint-disable-next-line no-console
     console.warn("append chat failed", err);
     return null;
+  }
+}
+
+export async function updateMaintenanceStatus(params: { id: string; status: MaintenanceStatus }) {
+  if (!isDbEnabled || !params.id) return null;
+  try {
+    return await db.maintenanceRequest.update({
+      where: { id: params.id },
+      data: { status: params.status, statusChangedAt: new Date() },
+    });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn("status update failed", err);
+    return null;
+  }
+}
+
+export async function updateMaintenanceAnalysis(params: {
+  id: string;
+  triage?: TriagePayload;
+  aiDraft?: AiDraftPayload;
+  priority?: Priority;
+  category?: string;
+}) {
+  if (!isDbEnabled || !params.id) return null;
+  try {
+    return await db.maintenanceRequest.update({
+      where: { id: params.id },
+      data: {
+        triageJson: params.triage as Prisma.InputJsonValue,
+        aiDraft: params.aiDraft as Prisma.InputJsonValue,
+        priority: params.priority,
+        category: params.category,
+      },
+    });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn("analysis update failed", err);
+    return null;
+  }
+}
+
+export async function listUtilityBills(params: { unitId?: string; tenantId?: string; limit?: number }) {
+  if (!isDbEnabled) return [];
+  const where: Prisma.UtilityBillWhereInput = {};
+  if (params.unitId) where.unitId = params.unitId;
+  if (params.tenantId) where.tenantId = params.tenantId;
+  const limit = params.limit && params.limit > 0 ? params.limit : 100;
+  try {
+    return await db.utilityBill.findMany({ where, orderBy: { createdAt: "desc" }, take: limit });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn("list utility bills failed", err);
+    return [];
+  }
+}
+
+export async function createUtilityCredential(params: {
+  unitId: string;
+  utilityType: UtilityType;
+  username?: string;
+  password?: string;
+  notes?: string;
+}) {
+  if (!isDbEnabled) return null;
+  try {
+    return await db.utilityCredential.create({ data: { ...params } });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn("create utility credential failed", err);
+    return null;
+  }
+}
+
+export async function listUtilityCredentials(params?: { unitId?: string; utilityType?: string }) {
+  if (!isDbEnabled) return [];
+  const where: Prisma.UtilityCredentialWhereInput = {};
+  if (params?.unitId) where.unitId = params.unitId;
+  if (params?.utilityType) where.utilityType = params.utilityType as UtilityType;
+  try {
+    return await db.utilityCredential.findMany({ where, orderBy: { createdAt: "desc" } });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn("list utility credentials failed", err);
+    return [];
   }
 }
 
@@ -353,12 +407,7 @@ export async function logAutopilotEvent(params: {
   }
 }
 
-export async function createTenant(params: {
-  id?: string;
-  name: string;
-  phone?: string;
-  email?: string;
-}) {
+export async function createTenant(params: { id?: string; name: string; phone?: string; email?: string; unitId?: string }) {
   if (!isDbEnabled) return null;
   try {
     const record = await db.tenant.create({
@@ -369,6 +418,9 @@ export async function createTenant(params: {
         email: params.email,
       },
     });
+    if (params.unitId) {
+      await db.unitTenant.create({ data: { unitId: params.unitId, tenantId: record.id } });
+    }
     return record;
   } catch (err) {
     // eslint-disable-next-line no-console
@@ -377,21 +429,31 @@ export async function createTenant(params: {
   }
 }
 
-export async function createUnit(params: {
-  id?: string;
-  label: string;
-  address: string;
-}) {
+export async function updateTenantContact(params: { id: string; phone?: string; email?: string }) {
+  if (!isDbEnabled || !params.id) return null;
+  const data: Record<string, unknown> = {};
+  if (typeof params.phone === "string") data.phone = params.phone;
+  if (typeof params.email === "string") data.email = params.email;
+  if (!Object.keys(data).length) return null;
+  try {
+    return await db.tenant.update({ where: { id: params.id }, data });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn("tenant update skipped", err);
+    return null;
+  }
+}
+
+export async function createUnit(params: { id?: string; label: string; address: string }) {
   if (!isDbEnabled) return null;
   try {
-    const record = await db.unit.create({
+    return await db.unit.create({
       data: {
         id: params.id,
         label: params.label,
         address: params.address,
       },
     });
-    return record;
   } catch (err) {
     // eslint-disable-next-line no-console
     console.warn("unit create skipped", err);
@@ -402,10 +464,101 @@ export async function createUnit(params: {
 export async function listTenants() {
   if (!isDbEnabled) return [];
   try {
-    return await db.tenant.findMany({ orderBy: { createdAt: "desc" } });
+    return await db.tenant.findMany({ orderBy: { createdAt: "desc" }, include: { units: true } });
   } catch (err) {
     // eslint-disable-next-line no-console
     console.warn("list tenants failed", err);
+    return [];
+  }
+}
+
+export async function updateTenant(params: { id: string; name?: string; phone?: string; email?: string; unitId?: string | null }) {
+  if (!isDbEnabled || !params.id) return null;
+  const data: Record<string, unknown> = {};
+  if (typeof params.name === "string") data.name = params.name;
+  if (typeof params.phone === "string") data.phone = params.phone;
+  if (typeof params.email === "string") data.email = params.email;
+  try {
+    const updated = await db.tenant.update({ where: { id: params.id }, data });
+    if (params.unitId !== undefined) {
+      await db.unitTenant.deleteMany({ where: { tenantId: params.id } });
+      if (params.unitId) {
+        await db.unitTenant.create({ data: { tenantId: params.id, unitId: params.unitId } });
+      }
+    }
+    return updated;
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn("tenant update skipped", err);
+    return null;
+  }
+}
+
+export async function deleteTenant(params: { id: string; hard?: boolean }) {
+  if (!isDbEnabled || !params.id) return null;
+  try {
+    await db.unitTenant.deleteMany({ where: { tenantId: params.id } });
+    return await db.tenant.delete({ where: { id: params.id } });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn("tenant delete skipped", err);
+    return null;
+  }
+}
+
+export async function createContractor(params: { id?: string; name: string; phone: string; email?: string; role?: string }) {
+  if (!isDbEnabled) return null;
+  try {
+    return await db.contractor.create({
+      data: {
+        id: params.id,
+        name: params.name,
+        phone: params.phone,
+        email: params.email,
+        role: params.role,
+      },
+    });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn("create contractor failed", err);
+    return null;
+  }
+}
+
+export async function updateContractor(params: { id: string; name?: string; phone?: string; email?: string; role?: string }) {
+  if (!isDbEnabled || !params.id) return null;
+  const data: Record<string, unknown> = {};
+  if (typeof params.name === "string") data.name = params.name;
+  if (typeof params.phone === "string") data.phone = params.phone;
+  if (typeof params.email === "string") data.email = params.email;
+  if (typeof params.role === "string") data.role = params.role;
+  try {
+    return await db.contractor.update({ where: { id: params.id }, data });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn("contractor update failed", err);
+    return null;
+  }
+}
+
+export async function deleteContractor(params: { id: string; hard?: boolean }) {
+  if (!isDbEnabled || !params.id) return null;
+  try {
+    return await db.contractor.delete({ where: { id: params.id } });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn("contractor delete failed", err);
+    return null;
+  }
+}
+
+export async function listContractors() {
+  if (!isDbEnabled) return [];
+  try {
+    return await db.contractor.findMany({ orderBy: { createdAt: "desc" } });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn("list contractors failed", err);
     return [];
   }
 }
@@ -418,6 +571,234 @@ export async function listUnits() {
     // eslint-disable-next-line no-console
     console.warn("list units failed", err);
     return [];
+  }
+}
+
+export async function updateUnit(params: { id: string; label?: string; address?: string }) {
+  if (!isDbEnabled || !params.id) return null;
+  const data: Record<string, unknown> = {};
+  if (typeof params.label === "string") data.label = params.label;
+  if (typeof params.address === "string") data.address = params.address;
+  try {
+    return await db.unit.update({ where: { id: params.id }, data });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn("unit update skipped", err);
+    return null;
+  }
+}
+
+export async function deleteUnit(params: { id: string; hard?: boolean }) {
+  if (!isDbEnabled || !params.id) return null;
+  try {
+    await db.unitTenant.deleteMany({ where: { unitId: params.id } });
+    await db.utilityBill.updateMany({ where: { unitId: params.id }, data: { unitId: null } });
+    await db.utilityCredential.deleteMany({ where: { unitId: params.id } });
+    await db.maintenanceRequest.updateMany({ where: { unitId: params.id }, data: { unitId: null } });
+    return await db.unit.delete({ where: { id: params.id } });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn("unit delete skipped", err);
+    return null;
+  }
+}
+
+export async function getTenantById(id?: string) {
+  if (!isDbEnabled || !id) return null;
+  try {
+    return await db.tenant.findUnique({ where: { id } });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn("get tenant failed", err);
+    return null;
+  }
+}
+
+export async function findTenantByPhone(phone?: string) {
+  if (!isDbEnabled || !phone) return null;
+  const trimmed = phone.trim();
+  if (!trimmed) return null;
+  const normalized = trimmed.replace(/\D/g, "");
+  const withPlus = normalized ? `+${normalized}` : "";
+  const candidates = Array.from(new Set([trimmed, normalized, withPlus].filter(Boolean)));
+  try {
+    return await db.tenant.findFirst({
+      where: {
+        OR: candidates.map((value) => ({ phone: value })),
+      },
+    });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn("find tenant by phone failed", err);
+    return null;
+  }
+}
+
+export async function findContractorByPhone(phone?: string) {
+  if (!isDbEnabled || !phone) return null;
+  const trimmed = phone.trim();
+  if (!trimmed) return null;
+  const normalized = trimmed.replace(/\D/g, "");
+  const withPlus = normalized ? `+${normalized}` : "";
+  const candidates = Array.from(new Set([trimmed, normalized, withPlus].filter(Boolean)));
+  try {
+    return await db.contractor.findFirst({
+      where: {
+        OR: candidates.map((value) => ({ phone: value })),
+      },
+    });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn("find contractor by phone failed", err);
+    return null;
+  }
+}
+
+export async function findLatestMaintenanceForTenantId(tenantId?: string) {
+  if (!isDbEnabled || !tenantId) return null;
+  try {
+    return await db.maintenanceRequest.findFirst({
+      where: {
+        tenantId,
+        status: { in: [MaintenanceStatus.OPEN, MaintenanceStatus.IN_PROGRESS] },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn("find latest maintenance failed", err);
+    return null;
+  }
+}
+
+export async function findLatestOpenMaintenance() {
+  if (!isDbEnabled) return null;
+  try {
+    return await db.maintenanceRequest.findFirst({
+      where: { status: { in: [MaintenanceStatus.OPEN, MaintenanceStatus.IN_PROGRESS] } },
+      orderBy: { createdAt: "desc" },
+    });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn("find latest open maintenance failed", err);
+    return null;
+  }
+}
+
+export async function updateUtilityCredential(params: { id: string; username?: string; password?: string; notes?: string }) {
+  if (!isDbEnabled || !params.id) return null;
+  const data: Record<string, unknown> = {};
+  if (typeof params.username === "string") data.username = params.username;
+  if (typeof params.password === "string") data.password = params.password;
+  if (typeof params.notes === "string") data.notes = params.notes;
+  try {
+    return await db.utilityCredential.update({ where: { id: params.id }, data });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn("update utility credential failed", err);
+    return null;
+  }
+}
+
+export async function deleteUtilityCredential(params: { id: string }) {
+  if (!isDbEnabled || !params.id) return null;
+  try {
+    return await db.utilityCredential.delete({ where: { id: params.id } });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn("delete utility credential failed", err);
+    return null;
+  }
+}
+
+export async function createUtilityBill(params: {
+  unitId?: string;
+  tenantId?: string;
+  maintenanceId?: string;
+  utilityType: UtilityType;
+  amountCents: number;
+  currency?: string;
+  billingPeriodStart?: Date;
+  billingPeriodEnd?: Date;
+  statementUrl?: string;
+  portalUsername?: string;
+  anomalyFlag?: boolean;
+  anomalyNotes?: string;
+  rawData?: unknown;
+}) {
+  if (!isDbEnabled) return null;
+  try {
+    return await db.utilityBill.create({
+      data: {
+        utilityType: params.utilityType,
+        amountCents: params.amountCents,
+        currency: params.currency || "CAD",
+        billingPeriodStart: params.billingPeriodStart || new Date(),
+        billingPeriodEnd: params.billingPeriodEnd || new Date(),
+        statementUrl: params.statementUrl,
+        portalUsername: params.portalUsername,
+        anomalyFlag: Boolean(params.anomalyFlag),
+        anomalyNotes: params.anomalyNotes,
+        rawData: params.rawData as Prisma.InputJsonValue,
+        unitId: params.unitId,
+        tenantId: params.tenantId,
+        maintenanceId: params.maintenanceId,
+      },
+    });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn("create utility bill failed", err);
+    return null;
+  }
+}
+
+export async function updateUtilityBill(params: {
+  id: string;
+  amountCents?: number;
+  currency?: string;
+  billingPeriodStart?: Date;
+  billingPeriodEnd?: Date;
+  statementUrl?: string;
+  anomalyFlag?: boolean;
+  anomalyNotes?: string;
+}) {
+  if (!isDbEnabled || !params.id) return null;
+  const data: Record<string, unknown> = {};
+  if (typeof params.amountCents === "number") data.amountCents = params.amountCents;
+  if (typeof params.currency === "string") data.currency = params.currency;
+  if (params.billingPeriodStart) data.billingPeriodStart = params.billingPeriodStart;
+  if (params.billingPeriodEnd) data.billingPeriodEnd = params.billingPeriodEnd;
+  if (typeof params.statementUrl === "string") data.statementUrl = params.statementUrl;
+  if (typeof params.anomalyFlag === "boolean") data.anomalyFlag = params.anomalyFlag;
+  if (typeof params.anomalyNotes === "string") data.anomalyNotes = params.anomalyNotes;
+  try {
+    return await db.utilityBill.update({ where: { id: params.id }, data });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn("update utility bill failed", err);
+    return null;
+  }
+}
+
+export async function deleteUtilityBill(params: { id: string }) {
+  if (!isDbEnabled || !params.id) return null;
+  try {
+    return await db.utilityBill.delete({ where: { id: params.id } });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn("delete utility bill failed", err);
+    return null;
+  }
+}
+
+export async function deleteMaintenance(params: { id: string }) {
+  if (!isDbEnabled || !params.id) return null;
+  try {
+    return await db.maintenanceRequest.delete({ where: { id: params.id } });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn("maintenance delete failed", err);
+    return null;
   }
 }
 
@@ -434,7 +815,30 @@ export default {
   setAutopilotEnabled,
   logAutopilotEvent,
   createTenant,
+  updateTenantContact,
+  updateTenant,
+  deleteTenant,
+  createContractor,
+  updateContractor,
+  deleteContractor,
+  listContractors,
   createUnit,
+  updateUnit,
+  deleteUnit,
+  getTenantById,
+  findTenantByPhone,
+  findContractorByPhone,
+  findLatestMaintenanceForTenantId,
+  findLatestOpenMaintenance,
   listTenants,
   listUnits,
+  listUtilityBills,
+  createUtilityBill,
+  updateUtilityBill,
+  deleteUtilityBill,
+  createUtilityCredential,
+  listUtilityCredentials,
+  updateUtilityCredential,
+  deleteUtilityCredential,
+  deleteMaintenance,
 };

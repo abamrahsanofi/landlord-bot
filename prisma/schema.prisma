@@ -9,6 +9,9 @@ datasource db {
 
 enum MaintenanceStatus {
 	OPEN
+	PENDING
+	IN_TRIAGE
+	SCHEDULED
 	IN_PROGRESS
 	RESOLVED
 	CANCELLED
@@ -46,6 +49,7 @@ model Unit {
 	tenants       UnitTenant[]
 	requests      MaintenanceRequest[]
 	utilityBills  UtilityBill[]
+	utilityCredentials UtilityCredential[]
 	createdAt     DateTime             @default(now())
 	updatedAt     DateTime             @updatedAt
 }
@@ -110,4 +114,26 @@ model UtilityBill {
 	maintenanceId    String?
 	createdAt        DateTime     @default(now())
 	updatedAt        DateTime     @updatedAt
+}
+
+model Contractor {
+	id        String   @id @default(cuid())
+	name      String
+	phone     String   @unique
+	email     String?
+	role      String?
+	createdAt DateTime @default(now())
+	updatedAt DateTime @updatedAt
+}
+
+model UtilityCredential {
+	id          String      @id @default(cuid())
+	unit        Unit        @relation(fields: [unitId], references: [id])
+	unitId      String
+	utilityType UtilityType
+	username    String?
+	password    String?
+	notes       String?
+	createdAt   DateTime    @default(now())
+	updatedAt   DateTime    @updatedAt
 }

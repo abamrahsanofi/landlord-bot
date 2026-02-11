@@ -3,1189 +3,879 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Landlord Stress Firewall Dashboard</title>
+  <title>Landlord Mission Control</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     :root {
-      --bg: #0b1220;
-      --panel: #0f1b30;
-      --accent: #35d2c5;
-      --accent-2: #7c5dff;
-      --text: #e8edf6;
-      --muted: #8ca0c2;
-      --border: #1e2a44;
-      --danger: #ff6b6b;
-      --warn: #ffb347;
-      --bubble-tenant: #11223d;
-      --bubble-landlord: #15304f;
-      --bubble-ai: #1a1f3a;
+      --nav: #1f2a44;
+      --nav-hover: #273255;
+      --bg: #f4f6fb;
+      --card: #ffffff;
+      --text: #1f2430;
+      --muted: #6b7080;
+      --accent: #ff8a4c;
+      --accent-2: #1f9eff;
+      --border: #e3e7f0;
+      --success: #3ecf8e;
+      --warn: #f5a524;
+      --danger: #ff5f6d;
+      --shadow: 0 12px 40px rgba(31, 42, 68, 0.08);
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      font-family: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
-      background: radial-gradient(circle at 20% 20%, #112040 0, #0b1220 45%), radial-gradient(circle at 80% 0%, #182a4c 0, #0b1220 55%);
+      font-family: "Poppins", "Segoe UI", system-ui, sans-serif;
+      background: var(--bg);
       color: var(--text);
+      display: flex;
       min-height: 100vh;
+    }
+    .sidebar {
+      width: 230px;
+      background: var(--nav);
+      color: #fff;
       display: flex;
       flex-direction: column;
-      gap: 12px;
-      padding: 12px;
+      padding: 20px 16px;
+      gap: 16px;
     }
-    h1 { margin: 0 0 8px; letter-spacing: 0.5px; }
-    .grid {
-      display: grid;
-      gap: 12px;
-      grid-template-columns: repeat(3, 1fr);
-    }
-    @media (max-width: 1100px) {
-      .grid { grid-template-columns: 1fr; }
-      .panel { min-height: auto; }
-    }
-    .panel {
-      background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 12px;
+    .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; letter-spacing: 0.5px; }
+    .brand span { background: var(--accent); color: #fff; padding: 8px 10px; border-radius: 10px; }
+    .nav-group { display: flex; flex-direction: column; gap: 8px; }
+    .nav-title { font-size: 12px; text-transform: uppercase; color: rgba(255,255,255,0.6); letter-spacing: 0.8px; }
+    .nav-item {
       display: flex;
-      flex-direction: column;
-      gap: 10px;
-      min-height: 70vh;
-    }
-    .panel h2 { margin: 0; font-size: 16px; display: flex; align-items: center; gap: 8px; }
-    label { display: block; font-size: 13px; margin-bottom: 4px; color: var(--muted); }
-    input, textarea, select {
-      width: 100%;
-      background: #0c172a;
-      color: var(--text);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 8px;
-      font-size: 14px;
-    }
-    textarea { resize: vertical; }
-    button {
-      background: linear-gradient(135deg, var(--accent), var(--accent-2));
-      color: #0a111f;
-      border: none;
-      border-radius: 8px;
-      padding: 10px 12px;
-      font-weight: 700;
-      cursor: pointer;
-    }
-    button:disabled { opacity: 0.5; cursor: not-allowed; }
-    .stack { display: flex; flex-direction: column; gap: 8px; }
-    .row { display: flex; gap: 8px; }
-    .row > * { flex: 1; }
-    pre {
-      background: #0c172a;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 8px;
-      overflow: auto;
-      max-height: 280px;
-      white-space: pre-wrap;
-      word-break: break-word;
-    }
-    .pill { padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); font-size: 12px; }
-    .muted { color: var(--muted); font-size: 13px; }
-    .toast {
-      position: fixed; right: 16px; bottom: 16px;
-      background: #0c172a; border: 1px solid var(--border); border-radius: 10px;
-      padding: 10px 12px; box-shadow: 0 8px 30px rgba(0,0,0,0.35);
-      opacity: 0; transform: translateY(10px); transition: 0.2s ease;
-    }
-    .toast.show { opacity: 1; transform: translateY(0); }
-    .chip { padding: 2px 6px; border: 1px solid var(--border); border-radius: 6px; font-size: 12px; color: var(--muted); }
-    .badge { padding: 2px 8px; border-radius: 8px; font-size: 12px; font-weight: 700; display: inline-block; }
-    .sev-critical { background: rgba(255,107,107,0.18); color: #ff9a9a; }
-    .sev-high { background: rgba(255,179,71,0.18); color: #ffc680; }
-    .sev-normal { background: rgba(53,210,197,0.18); color: #8cf2e6; }
-    .sev-low { background: rgba(140,160,194,0.18); color: #c7d5ec; }
-    .ticket-board { border: 1px solid var(--border); border-radius: 10px; padding: 10px; background: rgba(255,255,255,0.02); }
-    .ticket-cards { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
-    .ticket-card { flex: 1; min-width: 120px; border: 1px solid var(--border); border-radius: 8px; padding: 8px; background: #0c172a; }
-    .ticket-label { font-size: 12px; color: var(--muted); }
-    .ticket-count { font-size: 24px; font-weight: 800; }
-    .ticket-columns { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-    .ticket-columns h4 { margin: 0 0 6px; font-size: 14px; }
-    .ticket-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-    .ticket-list li { border: 1px solid var(--border); border-radius: 8px; padding: 6px; background: #0c172a; cursor: pointer; }
-    .ticket-list li div { font-size: 12px; color: var(--muted); }
-    .chat-feed {
-      flex: 1;
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 8px;
-      background: #0c172a;
-      overflow-y: auto;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      min-height: 240px;
-    }
-    #chatFeed { max-height: 320px; }
-    .bubble {
-      max-width: 90%;
-      padding: 8px 10px;
-      border-radius: 10px;
-      border: 1px solid var(--border);
-      position: relative;
-      display: inline-block;
-    }
-    .bubble-tenant { background: var(--bubble-tenant); align-self: flex-start; }
-    .bubble-landlord { background: var(--bubble-landlord); align-self: flex-end; }
-    .bubble-ai { background: var(--bubble-ai); align-self: flex-end; }
-    .bubble small { color: var(--muted); display: block; margin-top: 4px; }
-    .section-title { display: flex; justify-content: space-between; align-items: center; }
-    .dual { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-    .assistant-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
-    .ghost-btn {
-      background: transparent;
-      border: 1px solid var(--border);
-      color: var(--text);
-      padding: 8px 12px;
-      border-radius: 999px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-    .ghost-btn.on {
-      background: linear-gradient(135deg, var(--accent), var(--accent-2));
-      color: #041222;
-    }
-    .assistant-callout {
-      display: flex;
-      justify-content: space-between;
       align-items: center;
-      border: 1px dashed var(--border);
-      border-radius: 10px;
-      padding: 8px 12px;
-      background: rgba(53,210,197,0.05);
-      gap: 12px;
-    }
-    .assistant-sections { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
-    .assistant-chat { border: 1px solid var(--border); border-radius: 10px; padding: 12px; background: rgba(255,255,255,0.02); display: flex; flex-direction: column; gap: 10px; }
-    .assistant-chat h3 { margin: 0; font-size: 14px; letter-spacing: 0.5px; text-transform: uppercase; }
-    .assistant-feed { min-height: 150px; max-height: 260px; }
-    .assistant-feed .bubble { width: 100%; }
-    .assistant-feed .assistant-actions { margin-top: 6px; display: flex; gap: 6px; flex-wrap: wrap; }
-    .assistant-feed .assistant-actions button {
-      background: transparent;
-      color: var(--accent);
-      border: 1px solid var(--accent);
-      border-radius: 999px;
-      padding: 4px 10px;
-      font-size: 12px;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      color: #f7f8fc;
       cursor: pointer;
+      text-decoration: none;
+      transition: background 0.15s ease;
     }
-    .assistant-feed .assistant-actions button:hover { background: rgba(53,210,197,0.15); }
-    .assistant-analysis { font-size: 13px; line-height: 1.4; }
-    .assistant-draft {
-      margin-top: 6px;
-      padding: 8px;
-      border: 1px dashed var(--border);
-      border-radius: 8px;
-      background: #0f1c32;
-      font-size: 13px;
-      line-height: 1.4;
+    .nav-item:hover { background: var(--nav-hover); }
+    .nav-item.active { background: #ffffff; color: var(--nav); font-weight: 600; }
+    .layout-main { flex: 1; display: flex; flex-direction: column; }
+    header {
+      background: #fff;
+      border-bottom: 1px solid var(--border);
+      padding: 14px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      box-shadow: var(--shadow);
+      position: sticky;
+      top: 0;
+      z-index: 5;
     }
-    .assistant-draft strong { display: block; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); margin-bottom: 4px; }
-    .autopilot-zone { border: 1px solid var(--border); border-radius: 10px; padding: 10px; background: rgba(10,17,31,0.6); }
-    .autopilot-log { max-height: 180px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
-    .autopilot-log .log-entry { border: 1px solid var(--border); border-radius: 8px; padding: 8px; background: #0c172a; }
-    .autopilot-log .log-entry div { font-size: 11px; color: var(--muted); }
-    .autopilot-log .log-entry strong { display: inline-block; margin-top: 4px; letter-spacing: 0.5px; }
-    .autopilot-log .log-entry p { margin: 4px 0 0; font-size: 13px; color: var(--text); }
-    .pill-on { background: rgba(53,210,197,0.18); color: var(--accent); border-color: var(--accent); }
+    .search { flex: 1; display: flex; align-items: center; gap: 10px; background: var(--bg); border: 1px solid var(--border); padding: 10px 12px; border-radius: 12px; }
+    .search input { flex: 1; border: none; background: transparent; outline: none; font-size: 14px; color: var(--text); }
+    .actions { display: flex; align-items: center; gap: 10px; }
+    .btn {
+      border: none;
+      border-radius: 12px;
+      padding: 10px 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+    .btn:active { transform: translateY(1px); }
+    .btn-primary { background: linear-gradient(135deg, var(--accent), #ffb86c); color: #fff; box-shadow: var(--shadow); }
+    .btn-ghost { background: #fff; border: 1px solid var(--border); color: var(--text); }
+    main { padding: 18px; display: flex; flex-direction: column; gap: 16px; }
+    .cards { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 14px;
+      box-shadow: var(--shadow);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .card h4 { margin: 0; font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+    .card .big { font-size: 22px; font-weight: 700; }
+    .pill { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 4px 10px; font-size: 12px; }
+    .pill.success { background: rgba(62,207,142,0.15); color: var(--success); }
+    .pill.warn { background: rgba(245,165,36,0.15); color: var(--warn); }
+    .pill.danger { background: rgba(255,95,109,0.15); color: var(--danger); }
+    .section { background: var(--card); border: 1px solid var(--border); border-radius: 16px; box-shadow: var(--shadow); padding: 16px; display: none; flex-direction: column; gap: 12px; }
+    .section.active { display: flex; }
+    .section-title { display: flex; align-items: center; justify-content: space-between; }
+    .table { width: 100%; border-collapse: collapse; }
+    .table th, .table td { padding: 10px 8px; border-bottom: 1px solid var(--border); text-align: left; font-size: 14px; }
+    .table th { color: var(--muted); font-weight: 600; }
+    .muted { color: var(--muted); }
+    .grid-2 { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+    .form-grid { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+    input, select, textarea { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; font-size: 14px; background: #fff; color: var(--text); }
+    textarea { resize: vertical; min-height: 80px; }
+    .chip { padding: 4px 8px; border-radius: 8px; background: var(--bg); color: var(--muted); font-size: 12px; border: 1px solid var(--border); }
+    .assistant-panel { background: var(--card); border: 1px solid var(--border); border-radius: 16px; box-shadow: var(--shadow); padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+    .assistant-log { max-height: 200px; overflow: auto; border: 1px dashed var(--border); border-radius: 12px; padding: 10px; background: var(--bg); }
+    .toast { position: fixed; right: 16px; bottom: 16px; background: #1f2a44; color: #fff; padding: 12px 14px; border-radius: 12px; box-shadow: var(--shadow); opacity: 0; transform: translateY(10px); transition: 0.2s ease; }
+    .toast.show { opacity: 1; transform: translateY(0); }
+    .chart-wrap { background: var(--card); border: 1px solid var(--border); border-radius: 16px; box-shadow: var(--shadow); padding: 12px; }
+    .flex { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    @media (max-width: 960px) { .sidebar { width: 70px; } .nav-item span { display: none; } .brand span { display: none; } .brand strong { font-size: 14px; } }
   </style>
 </head>
 <body>
-  <header>
-    <h1>Landlord Stress Firewall</h1>
-    <div class="muted">Tenant chat · Raw LLM text · Landlord review + send</div>
-  </header>
+  <nav class="sidebar">
+    <div class="brand"><span>LF</span><strong>Landlord MC</strong></div>
+    <div class="nav-group">
+      <div class="nav-title">Overview</div>
+      <a class="nav-item active" data-target="mission">🏠 <span>Mission Control</span></a>
+      <a class="nav-item" data-target="maintenance">🛠️ <span>Maintenance</span></a>
+      <a class="nav-item" data-target="utilities">💡 <span>Utilities</span></a>
+    </div>
+    <div class="nav-group">
+      <div class="nav-title">Directory</div>
+      <a class="nav-item" data-target="units">🏢 <span>Units</span></a>
+      <a class="nav-item" data-target="tenants">👥 <span>Tenants</span></a>
+      <a class="nav-item" data-target="contractors">🧰 <span>Contractors</span></a>
+    </div>
+    <div class="nav-group">
+      <div class="nav-title">Messaging</div>
+      <a class="nav-item" data-target="whatsapp">💬 <span>WhatsApp Setup</span></a>
+      <a class="nav-item" data-target="assistant">🤖 <span>Assistant</span></a>
+      <a class="nav-item" data-target="reminders">⏰ <span>Reminders</span></a>
+    </div>
+  </nav>
 
-  <div class="grid">
-    <section class="panel" id="tenant-panel">
-      <div class="section-title">
-        <h2>Tenant Chat</h2>
-        <span class="pill" id="selectedStatus">New request</span>
+  <div class="layout-main">
+    <header>
+      <div class="search">
+        <span>🔍</span>
+        <input id="globalSearch" placeholder="Search tenants, units, maintenance..." />
       </div>
-      <div class="stack">
-        <div class="row">
-          <div>
-            <label for="conversationSelect">Conversation</label>
-            <select id="conversationSelect"></select>
-          </div>
-          <div>
-            <label for="tenantId">Tenant</label>
-            <select id="tenantId"><option value="">(select)</option></select>
-          </div>
-          <div>
-            <label for="unitId">Unit</label>
-            <select id="unitId"><option value="">(select)</option></select>
-          </div>
-        </div>
-        <div class="chat-feed" id="chatFeed">(no conversation)</div>
-        <div>
-          <label for="tenantMessage">Message</label>
-          <textarea id="tenantMessage" placeholder="Describe the issue or reply" rows="3"></textarea>
-        </div>
-        <div class="row">
-          <button id="sendTenant">Send as tenant</button>
-          <button id="startNew">Start new request</button>
-        </div>
-        <div class="muted" id="tenantStatus"></div>
+      <div class="actions">
+        <button class="btn btn-ghost" id="refreshBtn">Refresh</button>
+        <button class="btn btn-primary" id="addUnitShortcut">+ New Unit</button>
       </div>
-    </section>
+    </header>
 
-    <section class="panel" id="raw-panel">
-      <h2>Raw Text + Details</h2>
-      <div class="stack">
-        <div class="row">
-          <div>
-            <label>Triage</label>
-            <div id="triageSummary" class="muted">(none)</div>
-          </div>
-          <div>
-            <label>Meta</label>
-            <div class="muted" id="metaInfo">(none)</div>
-          </div>
+    <main>
+      <section id="mission" class="section active">
+        <div class="section-title"><h2>Mission Control</h2><span class="chip" id="dbState">DB: unknown</span></div>
+        <div class="flex" id="connChips">
+          <span class="chip" id="connLlm">LLM: unknown</span>
+          <span class="chip" id="connWhatsapp">WhatsApp: unknown</span>
+          <span class="chip" id="connUtility">Utility: unknown</span>
+          <span class="chip" id="connJeffy">Jeffy: unknown</span>
         </div>
-        <label>LLM raw triage</label>
-        <pre id="rawModel">(select a request)</pre>
-        <label>LLM drafted reply</label>
-        <pre id="rawDraft">(select a request)</pre>
-        <div class="ticket-board" id="ticketBoard">
-          <div class="ticket-cards">
-            <div class="ticket-card">
-              <div class="ticket-label">Pending</div>
-              <div class="ticket-count" id="pendingCount">0</div>
-            </div>
-            <div class="ticket-card">
-              <div class="ticket-label">Backlog</div>
-              <div class="ticket-count" id="backlogCount">0</div>
-            </div>
-            <div class="ticket-card">
-              <div class="ticket-label">Resolved</div>
-              <div class="ticket-count" id="resolvedCount">0</div>
-            </div>
-          </div>
-          <div class="ticket-columns">
-            <div>
-              <h4>Pending</h4>
-              <ul class="ticket-list" id="pendingList"><li class="muted">None</li></ul>
-            </div>
-            <div>
-              <h4>Backlog</h4>
-              <ul class="ticket-list" id="backlogList"><li class="muted">None</li></ul>
-            </div>
-            <div>
-              <h4>Resolved</h4>
-              <ul class="ticket-list" id="resolvedList"><li class="muted">None</li></ul>
-            </div>
-          </div>
+        <div class="cards">
+          <div class="card"><h4>Total Issues</h4><div class="big" id="cardIssues">--</div><span class="pill warn" id="cardIssuesBreakdown">--</span></div>
+          <div class="card"><h4>Active/Pending</h4><div class="big" id="cardPending">--</div><span class="pill" id="cardPendingBreakdown">--</span></div>
+          <div class="card"><h4>Open by Unit</h4><div class="big" id="cardUnits">--</div><span class="pill" id="cardTopUnit">--</span></div>
+          <div class="card"><h4>Utility Spend</h4><div class="big" id="cardUtility">--</div><span class="pill" id="cardUtilityNotes">--</span></div>
+          <div class="card"><h4>Tenants</h4><div class="big" id="cardTenants">--</div><span class="pill" id="cardUnitsTenants">--</span></div>
         </div>
-      </div>
-    </section>
+        <div class="grid-2">
+          <div class="chart-wrap"><div class="section-title"><h3>Maintenance by Status</h3><span class="muted">last 100</span></div><canvas id="chartStatus"></canvas></div>
+          <div class="chart-wrap"><div class="section-title"><h3>Utility by Unit</h3><span class="muted">latest bills</span></div><canvas id="chartUtility"></canvas></div>
+        </div>
+        <div class="grid-2">
+          <div class="chart-wrap"><div class="section-title"><h3>Issues by Unit</h3><span class="muted">open + in-progress</span></div><canvas id="chartUnitIssues"></canvas></div>
+          <div class="chart-wrap"><div class="section-title"><h3>Notifications</h3><span class="muted">latest activity</span></div><ul id="notifications" class="muted" style="list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:8px;"></ul></div>
+        </div>
+      </section>
 
-    <section class="panel" id="assistant-panel">
-      <div class="assistant-header">
-        <div>
-          <h2>Assistant Console</h2>
-          <div class="muted" id="autopilotStatus">Autopilot disabled</div>
-        </div>
-        <button id="autopilotToggle" class="ghost-btn">Enable autopilot</button>
-      </div>
-      <div class="stack">
-        <div class="row">
-          <div class="stack">
-            <label for="reviewSelect">Request</label>
-            <select id="reviewSelect"></select>
-          </div>
-          <div class="stack">
-            <label>Status</label>
-            <div class="row">
-              <button id="markInProgress">Mark in-progress</button>
-              <button id="markResolved">Mark resolved</button>
-            </div>
-          </div>
-        </div>
-        <div class="assistant-callout">
+      <section id="maintenance" class="section">
+        <div class="section-title"><h2>Maintenance</h2><div class="flex"><select id="maintStatusFilter"><option value="">All</option><option>OPEN</option><option>PENDING</option><option>IN_TRIAGE</option><option>SCHEDULED</option><option>IN_PROGRESS</option><option>RESOLVED</option><option>CANCELLED</option></select><button class="btn btn-ghost" id="refreshMaint">Refresh</button></div></div>
+        <div class="grid-2">
           <div>
-            <div class="muted" style="font-size:12px;">Live triage severity</div>
-            <span class="pill" id="autopilotMode">manual</span>
+            <h4>Pending by Unit</h4>
+            <table class="table" id="maintUnitTable"><thead><tr><th>Unit</th><th>Pending</th><th>In Triage</th><th>Scheduled</th><th>Open</th></tr></thead><tbody><tr><td colspan="5" class="muted">Loading...</td></tr></tbody></table>
           </div>
-          <div style="text-align:right; font-size:12px; color:var(--muted);">
-            Autopilot only replies to low/normal severity tickets. Manual review stays in control.
+          <div>
+            <h4>Autopilot</h4>
+            <div class="muted">Toggle per-ticket. High/Critical never auto-send.</div>
+            <table class="table" id="autopilotTable"><thead><tr><th>Unit</th><th>Tenant</th><th>Severity</th><th>Autopilot</th></tr></thead><tbody><tr><td colspan="4" class="muted">Loading...</td></tr></tbody></table>
           </div>
         </div>
-        <div class="stack" style="border:1px solid var(--border); border-radius:10px; padding:12px; background:rgba(255,255,255,0.02); gap:14px;">
-          <div class="section-title">
-            <h3 style="margin:0">Assistant + Draft</h3>
-            <span class="pill" id="reviewBadge">manual</span>
-          </div>
-          <div class="assistant-chat">
-            <div class="section-title">
-              <strong>Assistant Chat</strong>
-              <button class="ghost-btn" id="assistantClear">Clear</button>
+        <h4>All Issues</h4>
+        <table class="table" id="maintTable"><thead><tr><th>Unit</th><th>Tenant</th><th>Status</th><th>Severity</th><th>Message</th><th>Updated</th><th>Actions</th></tr></thead><tbody><tr><td colspan="7" class="muted">Loading...</td></tr></tbody></table>
+      </section>
+
+      <section id="utilities" class="section">
+        <div class="section-title"><h2>Utilities</h2><button class="btn btn-ghost" id="refreshUtilities">Refresh</button></div>
+        <div class="grid-2">
+          <div>
+            <h4>Latest Bills</h4>
+            <div class="form-grid" id="billForm">
+              <select id="billUnit"></select>
+              <select id="billType"><option value="INTERNET">INTERNET</option><option value="WATER_GAS">WATER_GAS</option><option value="HYDRO">HYDRO</option></select>
+              <input id="billAmount" type="number" step="0.01" placeholder="Amount" />
+              <input id="billCurrency" placeholder="Currency" value="CAD" />
+              <input id="billPeriodEnd" placeholder="Period end (YYYY-MM-DD)" />
+              <input id="billStatement" placeholder="Statement/PDF URL" />
+              <button class="btn btn-primary" id="saveBill">Save Bill</button>
             </div>
-            <div class="chat-feed assistant-feed" id="assistantFeed">
-              <div class="muted">Ask the assistant for tone shifts, summaries, or follow-up ideas.</div>
-            </div>
-            <textarea id="assistantPrompt" rows="3" placeholder="e.g. 'Make it friendlier' or 'Suggest a follow-up question'"></textarea>
-            <div class="row" style="align-items:center">
-              <button id="assistantSend">Ask assistant</button>
-              <label class="muted" style="display:flex;align-items:center;gap:6px;">
-                <input type="checkbox" id="assistantUseDraft" checked />
-                Include current draft context
-              </label>
-            </div>
+            <table class="table" id="utilityTable"><thead><tr><th>Unit</th><th>Type</th><th>Amount</th><th>Period End</th><th>Actions</th></tr></thead><tbody><tr><td colspan="5" class="muted">Loading...</td></tr></tbody></table>
           </div>
-          <div class="stack">
-            <label>Draft to tenant</label>
-            <textarea id="landlordDraft" rows="8" placeholder="Use the assistant output or type your own"></textarea>
-            <div class="row">
-              <button id="useDraft">Load AI draft</button>
-              <button id="sendLandlord">Send to tenant</button>
+          <div>
+            <h4>Login Credentials</h4>
+            <div class="form-grid">
+              <select id="utilUnit"></select>
+              <select id="utilType"><option value="INTERNET">INTERNET</option><option value="WATER_GAS">WATER_GAS</option><option value="HYDRO">HYDRO</option></select>
+              <input id="utilUser" placeholder="Username" />
+              <input id="utilPass" placeholder="Password" />
+              <input id="utilNotes" placeholder="Notes" />
+              <button class="btn btn-primary" id="saveUtilCred">Save Credential</button>
             </div>
-            <div class="row" style="justify-content:flex-end">
-              <button class="ghost-btn" id="manualApprove" style="flex:0 0 auto">Mark manual draft ready</button>
-            </div>
-            <div class="muted" id="sendGateHint">Use Add to draft or mark the manual draft ready to enable sending.</div>
-            <label for="refineInstructions">Refinement instructions</label>
-            <textarea id="refineInstructions" rows="4" placeholder="Tell the assistant how to tweak the current draft"></textarea>
-            <div class="row" style="align-items:center">
-              <button id="refineDraftBtn">Ask assistant to refine</button>
-              <label class="muted" style="display:flex;align-items:center;gap:6px;">
-                <input type="checkbox" id="useLandlordEdits" />
-                Use my current edits as base
-              </label>
-            </div>
+            <table class="table" id="utilCredTable"><thead><tr><th>Unit</th><th>Type</th><th>User</th><th>Notes</th><th>Actions</th></tr></thead><tbody><tr><td colspan="5" class="muted">No credentials yet.</td></tr></tbody></table>
           </div>
         </div>
-      </div>
-      <div class="stack autopilot-zone">
-        <div class="section-title">
-          <h3 style="margin:0">Autopilot journal</h3>
-          <span class="pill" id="autopilotStatePill">manual</span>
+      </section>
+
+      <section id="units" class="section">
+        <div class="section-title"><h2>Units</h2><button class="btn btn-ghost" id="refreshUnits">Refresh</button></div>
+        <div class="form-grid">
+          <input id="unitLabel" placeholder="Label" />
+          <input id="unitAddress" placeholder="Address" />
+          <button class="btn btn-primary" id="createUnitBtn">Add Unit</button>
         </div>
-        <div id="autopilotLog" class="autopilot-log">
-          <div class="muted">No autopilot events yet.</div>
+        <table class="table" id="unitTable"><thead><tr><th>Label</th><th>Address</th><th>Created</th><th>Actions</th></tr></thead><tbody><tr><td colspan="4" class="muted">Loading...</td></tr></tbody></table>
+      </section>
+
+      <section id="tenants" class="section">
+        <div class="section-title"><h2>Tenants</h2><button class="btn btn-ghost" id="refreshTenants">Refresh</button></div>
+        <div class="form-grid">
+          <input id="tenantName" placeholder="Name" />
+          <input id="tenantPhone" placeholder="Phone" />
+          <input id="tenantEmail" placeholder="Email" />
+          <select id="tenantUnit"></select>
+          <button class="btn btn-primary" id="createTenantBtn">Add Tenant</button>
         </div>
-      </div>
-      <hr />
-      <div class="stack">
-        <h3 style="margin:0">Directory</h3>
-        <div class="dual">
-          <div class="stack">
-            <label>Create Tenant</label>
-            <input id="newTenantId" placeholder="Tenant ID (optional)" />
-            <input id="newTenantName" placeholder="Tenant name" />
-            <input id="newTenantPhone" placeholder="Phone (optional)" />
-            <input id="newTenantEmail" placeholder="Email (optional)" />
-            <button id="createTenant">Create tenant</button>
+        <table class="table" id="tenantTable"><thead><tr><th>Name</th><th>Phone</th><th>Email</th><th>Unit</th><th>Actions</th></tr></thead><tbody><tr><td colspan="5" class="muted">Loading...</td></tr></tbody></table>
+      </section>
+
+      <section id="contractors" class="section">
+        <div class="section-title"><h2>Contractors</h2><button class="btn btn-ghost" id="refreshContractors">Refresh</button></div>
+        <div class="form-grid">
+          <input id="contractorName" placeholder="Name" />
+          <input id="contractorPhone" placeholder="Phone" />
+          <input id="contractorEmail" placeholder="Email" />
+          <input id="contractorRole" placeholder="Role" />
+          <button class="btn btn-primary" id="createContractorBtn">Add Contractor</button>
+        </div>
+        <table class="table" id="contractorTable"><thead><tr><th>Name</th><th>Phone</th><th>Email</th><th>Role</th><th>Actions</th></tr></thead><tbody><tr><td colspan="5" class="muted">Loading...</td></tr></tbody></table>
+      </section>
+
+      <section id="whatsapp" class="section">
+        <div class="section-title"><h2>WhatsApp Setup</h2><span class="muted">Evolution API</span></div>
+        <div class="grid-2">
+          <div>
+            <h4>Landlord Numbers</h4>
+            <input id="landlordNumbers" placeholder="+14165550123, +14165550124" />
+            <button class="btn btn-primary" id="saveLandlordNumbers">Save Numbers</button>
+            <div class="muted" id="landlordNumbersStatus"></div>
           </div>
-          <div class="stack">
-            <label>Create Unit</label>
-            <input id="newUnitId" placeholder="Unit ID (optional)" />
-            <input id="newUnitLabel" placeholder="Label" />
-            <input id="newUnitAddress" placeholder="Address" />
-            <button id="createUnit">Create unit</button>
+          <div>
+            <h4>Connection</h4>
+            <div class="muted">Fetch QR from Evolution API instance (not wired yet). Use your Evolution UI to pair the session.</div>
+            <button class="btn btn-ghost" id="testWhatsapp">Send Test Message</button>
+            <input id="testWhatsappTo" placeholder="Destination number" />
+            <input id="testWhatsappMsg" placeholder="Test message" value="Hello from Landlord MC" />
+            <div class="muted" id="whatsappStatus"></div>
           </div>
         </div>
-        <div class="row">
-          <button id="loadTenants">Load tenants</button>
-          <button id="loadUnits">Load units</button>
+      </section>
+
+      <section id="assistant" class="section">
+        <div class="section-title"><h2>Landlord Assistant</h2><span class="muted">Advisor + drafts</span></div>
+        <div class="assistant-panel">
+          <textarea id="assistantInput" placeholder="Ask the assistant about drafts, tenants, or next steps" rows="4"></textarea>
+          <div class="flex">
+            <button class="btn btn-primary" id="assistantSend">Ask</button>
+            <select id="assistantStyle">
+              <option value="short">Short</option>
+              <option value="medium">Medium</option>
+              <option value="professional">Professional</option>
+              <option value="casual">Casual</option>
+            </select>
+            <span class="muted">Responses will appear below.</span>
+          </div>
+          <div class="assistant-log" id="assistantLog"><div class="muted">No messages yet.</div></div>
         </div>
-        <div class="row">
-          <pre id="tenantsBox">(none)</pre>
-          <pre id="unitsBox">(none)</pre>
+      </section>
+
+      <section id="reminders" class="section">
+        <div class="section-title"><h2>Reminders</h2><button class="btn btn-ghost" id="refreshReminders">Refresh</button></div>
+        <div class="form-grid">
+          <select id="reminderType">
+            <option value="rent">Rent collection</option>
+            <option value="utility">Utility bill</option>
+          </select>
+          <input id="reminderDay" type="number" min="1" max="28" placeholder="Day of month (1-28)" />
+          <input id="reminderTime" placeholder="Time UTC (e.g., 14:00)" />
+          <select id="reminderStyle">
+            <option value="short">Short</option>
+            <option value="medium">Medium</option>
+            <option value="professional">Professional</option>
+            <option value="casual">Casual</option>
+          </select>
+          <button class="btn btn-primary" id="saveReminder">Save Reminder</button>
         </div>
-      </div>
-    </section>
+        <table class="table" id="reminderTable"><thead><tr><th>Type</th><th>Day</th><th>Time (UTC)</th><th>Style</th><th>Actions</th></tr></thead><tbody><tr><td colspan="5" class="muted">No reminders yet.</td></tr></tbody></table>
+      </section>
+    </main>
   </div>
 
   <div id="toast" class="toast"></div>
 
   <script>
-    const statusEl = document.getElementById("tenantStatus");
-    const chatFeed = document.getElementById("chatFeed");
-    const rawModel = document.getElementById("rawModel");
-    const rawDraft = document.getElementById("rawDraft");
-    const triageSummary = document.getElementById("triageSummary");
-    const metaInfo = document.getElementById("metaInfo");
-    const landlordDraft = document.getElementById("landlordDraft");
-    const refineInstructions = document.getElementById("refineInstructions");
-    const useLandlordEdits = document.getElementById("useLandlordEdits");
-    const selectedStatus = document.getElementById("selectedStatus");
-    const toastEl = document.getElementById("toast");
-    const ticketBoard = document.getElementById("ticketBoard");
-    const pendingCount = document.getElementById("pendingCount");
-    const backlogCount = document.getElementById("backlogCount");
-    const resolvedCount = document.getElementById("resolvedCount");
-    const pendingList = document.getElementById("pendingList");
-    const backlogList = document.getElementById("backlogList");
-    const resolvedList = document.getElementById("resolvedList");
-    const autopilotToggle = document.getElementById("autopilotToggle");
-    const autopilotStatus = document.getElementById("autopilotStatus");
-    const autopilotLog = document.getElementById("autopilotLog");
-    const autopilotMode = document.getElementById("autopilotMode");
-    const autopilotStatePill = document.getElementById("autopilotStatePill");
-    const assistantFeed = document.getElementById("assistantFeed");
-    const assistantPrompt = document.getElementById("assistantPrompt");
-    const assistantSend = document.getElementById("assistantSend");
-    const assistantUseDraft = document.getElementById("assistantUseDraft");
-    const assistantClear = document.getElementById("assistantClear");
-    const reviewBadge = document.getElementById("reviewBadge");
-    const sendLandlordBtn = document.getElementById("sendLandlord");
-    const sendGateHint = document.getElementById("sendGateHint");
-    const manualApproveBtn = document.getElementById("manualApprove");
+    const navItems = [...document.querySelectorAll('.nav-item')];
+    const sections = [...document.querySelectorAll('.section')];
+    const toastEl = document.getElementById('toast');
 
-    const tenantSelect = document.getElementById("tenantId");
-    const unitSelect = document.getElementById("unitId");
-    const conversationSelect = document.getElementById("conversationSelect");
-    const reviewSelect = document.getElementById("reviewSelect");
-
-    const tenantsBox = document.getElementById("tenantsBox");
-    const unitsBox = document.getElementById("unitsBox");
-
-    let cachedTenants = [];
-    let cachedUnits = [];
-    let cachedItems = [];
-    let selectedId = null;
-    const assistantThreads = {};
-    const autopilotSeenEntries = new Set();
-    let autopilotHydrated = false;
-    const UI_SAFE_AUTOPILOT_SEVERITIES = new Set(["low", "normal"]);
-    const assistantReadyByItem = {};
-    const assistantDraftOverrides = {};
-    let assistantReady = false;
-    let suppressDraftWatcher = false;
-
-    async function fetchItem(id) {
-      if (!id) return null;
-      try {
-        const res = await fetch(`/maintenance/${id}`);
-        const data = await res.json();
-        if (!res.ok) return null;
-        return data.item;
-      } catch (err) {
-        return null;
-      }
+    function showView(id) {
+      sections.forEach((s) => s.classList.toggle('active', s.id === id));
+      navItems.forEach((n) => n.classList.toggle('active', n.dataset.target === id));
     }
+    navItems.forEach((n) => n.addEventListener('click', () => showView(n.dataset.target)));
 
-    function showToast(msg, isError = false) {
+    function toast(msg) {
       toastEl.textContent = msg;
-      toastEl.style.borderColor = isError ? "var(--danger)" : "var(--border)";
-      toastEl.classList.add("show");
-      setTimeout(() => toastEl.classList.remove("show"), 2000);
+      toastEl.classList.add('show');
+      setTimeout(() => toastEl.classList.remove('show'), 2500);
     }
 
-    function severityBadge(sev) {
-      const cls = {
-        critical: "sev-critical",
-        high: "sev-high",
-        normal: "sev-normal",
-        low: "sev-low",
-      }[sev?.toLowerCase() || "normal"] || "sev-normal";
-      return `<span class="badge ${cls}">${sev || "normal"}</span>`;
+    async function fetchJson(url, options) {
+      const res = await fetch(url, options);
+      if (!res.ok) throw new Error(`Request failed ${res.status}`);
+      return res.json();
     }
 
-    function optionLabel(item) {
-      const snippet = (item.message || "").slice(0, 50);
-      return `[${item.status}] ${item.unitId || "unit?"} · ${snippet}`;
+    const ACTIVE_STATUSES = ['OPEN','PENDING','IN_TRIAGE','SCHEDULED','IN_PROGRESS'];
+    const state = { units: [], tenants: [], contractors: [], maintenance: [], utilityBills: [], utilityCreds: [], reminders: [], dbEnabled: true, health: { llm: "unknown", whatsapp: "unknown", utility: "unknown", jeffy: "unknown" } };
+
+    function severityOf(record) {
+      return (record?.triageJson?.classification?.severity || record?.triage?.classification?.severity || 'unknown').toString().toLowerCase();
     }
 
-    function updateSendButtonState() {
-      if (!sendLandlordBtn) return;
-      const hasDraft = Boolean(landlordDraft?.value?.trim());
-      const canSend = Boolean(selectedId && assistantReady && hasDraft);
-      sendLandlordBtn.disabled = !canSend;
-      sendLandlordBtn.title = canSend
-        ? "Send the approved draft to the tenant"
-        : "Use Add to draft or mark the manual draft ready first";
-      if (manualApproveBtn) {
-        const canManualApprove = Boolean(selectedId && hasDraft);
-        manualApproveBtn.disabled = !canManualApprove;
-        manualApproveBtn.title = canManualApprove
-          ? "Confirm the current draft is reviewed"
-          : "Select a request and add draft text first";
-      }
-      if (sendGateHint) {
-        if (!selectedId) {
-          sendGateHint.textContent = "Select a request to draft a reply.";
-        } else if (!assistantReady) {
-          sendGateHint.textContent = "Use Add to draft or mark the manual draft ready to unlock sending.";
-        } else if (!hasDraft) {
-          sendGateHint.textContent = "Draft is empty.";
-        } else {
-          sendGateHint.textContent = "Draft approved — ready to send.";
-        }
-        sendGateHint.style.color = canSend ? "var(--accent)" : "var(--muted)";
-      }
-    }
-
-    function markAssistantReady(state) {
-      if (!selectedId) return;
-      assistantReadyByItem[selectedId] = Boolean(state);
-      assistantReady = assistantReadyByItem[selectedId];
-      updateSendButtonState();
-    }
-
-    function clearAssistantReadyState(id = selectedId) {
-      if (!id) {
-        assistantReady = false;
-        updateSendButtonState();
-        return;
-      }
-      assistantReadyByItem[id] = false;
-      delete assistantDraftOverrides[id];
-      if (id === selectedId) {
-        assistantReady = false;
-        updateSendButtonState();
-      }
-    }
-
-    function syncAssistantReadyState() {
-      assistantReady = Boolean(selectedId && assistantReadyByItem[selectedId]);
-      updateSendButtonState();
-    }
-
-    updateSendButtonState();
-
-    function applyAssistantDraft(text) {
-      if (!text) return;
-      suppressDraftWatcher = true;
-      landlordDraft.value = text;
-      setTimeout(() => {
-        suppressDraftWatcher = false;
-      }, 0);
-      if (selectedId) {
-        assistantDraftOverrides[selectedId] = text;
-      }
-      markAssistantReady(true);
-    }
-
-    function markManualDraftReady() {
-      if (!selectedId) return showToast("Select a request first", true);
-      const text = landlordDraft?.value?.trim();
-      if (!text) return showToast("Draft is empty", true);
-      assistantDraftOverrides[selectedId] = landlordDraft.value;
-      markAssistantReady(true);
-      showToast("Manual draft marked ready");
-    }
-
-    function syncSelects() {
-      const options = cachedItems.map((i) => `<option value="${i.id}">${optionLabel(i)}</option>`).join("");
-      const base = `<option value="">New request</option>` + options;
-      conversationSelect.innerHTML = base;
-      reviewSelect.innerHTML = base;
-      conversationSelect.value = selectedId || "";
-      reviewSelect.value = selectedId || "";
-    }
-
-    function getSelectedItem() {
-      return cachedItems.find((i) => i.id === selectedId) || null;
-    }
-
-    function renderChat(item) {
-      if (!item) {
-        chatFeed.innerHTML = "<div class=\"muted\">Start a new request to chat.</div>";
-        selectedStatus.textContent = "New request";
-        selectedStatus.className = "pill";
-        return;
-      }
-      selectedStatus.textContent = `${item.status}`;
-      selectedStatus.className = `pill`;
-      const log = Array.isArray(item.chatLog) ? item.chatLog : [];
-      const fallback = log.length ? [] : [
-        { role: "tenant", content: item.message, createdAt: item.createdAt },
-        item.aiDraft?.draft ? { role: "ai", content: item.aiDraft.draft, createdAt: item.createdAt } : null,
-      ].filter(Boolean);
-      const combined = [...log, ...fallback];
-      if (!combined.length) {
-        chatFeed.innerHTML = "<div class=\"muted\">No messages yet.</div>";
-        return;
-      }
-      chatFeed.innerHTML = combined
-        .sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0))
-        .map((entry) => {
-          const cls = entry.role === "tenant" ? "bubble-tenant" : entry.role === "ai" ? "bubble-ai" : "bubble-landlord";
-          const when = entry.createdAt ? new Date(entry.createdAt).toLocaleString() : "";
-          return `<div class="bubble ${cls}">${entry.content}<small>${entry.role} • ${when}</small></div>`;
-        })
-        .join("");
-      chatFeed.scrollTop = chatFeed.scrollHeight;
-    }
-
-    function renderRaw(item) {
-      if (!item) {
-        rawModel.textContent = "(select a request)";
-        rawDraft.textContent = "(select a request)";
-        triageSummary.textContent = "(none)";
-        metaInfo.textContent = "(none)";
-        return;
-      }
-      triageSummary.innerHTML = `${severityBadge(item.triageJson?.classification?.severity)} <span class="chip">${item.triageJson?.classification?.category || "general"}</span>`;
-      metaInfo.textContent = `Priority ${item.priority} · ${item.tenantId || "no tenant"} · ${item.unitId || "no unit"}`;
-      rawModel.textContent = item.triageJson?.rawModelText || JSON.stringify(item.triageJson || {}, null, 2) || "(none)";
-      rawDraft.textContent = item.aiDraft?.draft || "(no draft saved)";
-    }
-
-    function renderReview(item) {
-      if (!item) {
-        landlordDraft.value = "";
-        if (reviewBadge) {
-          reviewBadge.textContent = "manual";
-          reviewBadge.className = "pill";
-        }
-        return;
-      }
-      const hasOverride = Object.prototype.hasOwnProperty.call(assistantDraftOverrides, item.id);
-      const text = hasOverride ? assistantDraftOverrides[item.id] : item.landlordReply ?? item.aiDraft?.draft ?? "";
-      landlordDraft.value = text;
-      if (reviewBadge) {
-        reviewBadge.textContent = item.autopilotEnabled ? "autopilot" : "manual";
-        reviewBadge.className = item.autopilotEnabled ? "pill pill-on" : "pill";
-      }
-    }
-
-    function ensureAssistantThread(id) {
-      if (!id) return [];
-      if (!assistantThreads[id]) assistantThreads[id] = [];
-      return assistantThreads[id];
-    }
-
-    function pushAssistantEntry(id, entry) {
-      if (!id) return null;
-      const thread = ensureAssistantThread(id);
-      const record = {
-        id: entry.id || `advisor-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-        role: entry.role,
-        content: entry.content,
-        createdAt: entry.createdAt || new Date().toISOString(),
-        meta: entry.meta || null,
-      };
-      thread.push(record);
-      return record;
-    }
-
-    function renderAssistantFeed() {
-      if (!assistantFeed) return;
-      if (!selectedId) {
-        assistantFeed.innerHTML = '<div class="muted">Select a request to chat with the assistant.</div>';
-        return;
-      }
-      const thread = ensureAssistantThread(selectedId);
-      if (!thread.length) {
-        assistantFeed.innerHTML = '<div class="muted">Ask the assistant for tone shifts, TL;DRs, or follow-up ideas.</div>';
-        return;
-      }
-      assistantFeed.innerHTML = thread
-        .map((entry) => {
-          const cls = entry.role === "assistant" ? "bubble-ai" : "bubble-landlord";
-          const label = entry.role === "assistant" ? "Assistant" : "You";
-          const when = entry.createdAt ? new Date(entry.createdAt).toLocaleString() : "";
-          const variant = entry.meta?.kind || (entry.meta?.draftText ? "reply" : null);
-          let body = entry.content;
-          if (entry.role === "assistant") {
-            if (variant === "reply") {
-              body = `<div class="assistant-draft"><strong>Ready reply</strong>${entry.content}</div>`;
-            } else {
-              body = `<div class="assistant-analysis">${entry.content}</div>`;
-            }
-          }
-          const actions = entry.role === "assistant" && variant === "reply"
-            ? `<div class="assistant-actions"><button class="apply-suggestion" data-entry-id="${entry.id}">Add to draft</button></div>`
-            : "";
-          return `<div class="bubble ${cls}">${body}${actions}<small>${label} • ${when}</small></div>`;
-        })
-        .join("");
-      assistantFeed.scrollTop = assistantFeed.scrollHeight;
-    }
-
-    function handleAutopilotNotifications(entries) {
-      if (!Array.isArray(entries)) return;
-      entries.forEach((entry) => {
-        if (!entry || !entry.id) return;
-        const isNew = !autopilotSeenEntries.has(entry.id);
-        if (isNew) {
-          if (autopilotHydrated && entry.type === "auto_reply") {
-            showToast("Assistant auto-sent the latest reply");
-          }
-          autopilotSeenEntries.add(entry.id);
-        }
-      });
-      if (!autopilotHydrated) {
-        autopilotHydrated = true;
-      }
-    }
-
-    function renderAutopilot(item) {
-      if (!autopilotToggle) return;
-      if (!item) {
-        autopilotToggle.disabled = true;
-        autopilotToggle.classList.remove("on");
-        autopilotToggle.textContent = "Enable autopilot";
-        if (autopilotStatus) autopilotStatus.textContent = "Select a request to manage autopilot";
-        if (autopilotMode) autopilotMode.textContent = "manual";
-        if (autopilotStatePill) {
-          autopilotStatePill.textContent = "manual";
-          autopilotStatePill.className = "pill";
-        }
-        if (autopilotLog) autopilotLog.innerHTML = '<div class="muted">No autopilot data.</div>';
-        return;
-      }
-      const enabled = Boolean(item.autopilotEnabled);
-      const severityRaw = (item.triageJson?.classification?.severity || "unknown").toString();
-      const severity = severityRaw.toLowerCase();
-      const severityAllowed = UI_SAFE_AUTOPILOT_SEVERITIES.has(severity);
-      const canToggleOn = selectedId && (enabled || severityAllowed);
-      autopilotToggle.disabled = !canToggleOn;
-      autopilotToggle.classList.toggle("on", enabled);
-      autopilotToggle.textContent = enabled ? "Disable autopilot" : "Enable autopilot";
-      autopilotToggle.title = severityAllowed ? "Autopilot replies to low/normal severity tickets" : "Autopilot blocked for this severity";
-      if (autopilotStatus) {
-        if (!severityAllowed && !enabled) {
-          autopilotStatus.textContent = `Autopilot blocked for ${severity || "unknown"} severity`;
-        } else {
-          const stateText = item.autopilotStatus || (enabled ? "idle" : "manual");
-          autopilotStatus.textContent = enabled ? `Autopilot ${stateText}` : "Autopilot disabled";
-        }
-      }
-      if (autopilotMode) autopilotMode.textContent = severityRaw;
-      if (autopilotStatePill) {
-        autopilotStatePill.textContent = enabled ? "auto" : "manual";
-        autopilotStatePill.className = enabled ? "pill pill-on" : "pill";
-      }
-      const log = Array.isArray(item.autopilotLog) ? item.autopilotLog : [];
-      if (autopilotLog) {
-        if (!log.length) {
-          autopilotLog.innerHTML = '<div class="muted">No autopilot events yet.</div>';
-        } else {
-          autopilotLog.innerHTML = log
-            .slice(-6)
-            .reverse()
-            .map((entry) => {
-              const when = entry.createdAt ? new Date(entry.createdAt).toLocaleString() : "";
-              const status = entry.status ? `<span class="chip">${entry.status}</span>` : "";
-              return `<div class="log-entry"><div>${when}</div><strong>${entry.type || "event"}</strong> ${status}<p>${entry.message}</p></div>`;
-            })
-            .join("");
-        }
-      }
-      handleAutopilotNotifications(log);
-    }
-
-    function renderAll() {
-      syncSelects();
-      const item = getSelectedItem();
-      renderChat(item);
-      renderRaw(item);
-      renderReview(item);
-      renderAssistantFeed();
-      renderAutopilot(item);
-      renderTicketBoard(cachedItems);
-      syncAssistantReadyState();
-    }
-
-    function populateSelect(select, items, placeholder) {
-      const current = select.value;
-      select.innerHTML = `<option value="">${placeholder}</option>` + items.map((t) => `<option value="${t.id}">${t.id}${t.name ? " · " + t.name : ""}</option>`).join("");
-      if (current) select.value = current;
-    }
-
-    async function loadTenants() {
-      const res = await fetch("/admin/tenants");
-      const data = await res.json();
-      cachedTenants = data.items || [];
-      tenantsBox.textContent = JSON.stringify(cachedTenants, null, 2);
-      populateSelect(tenantSelect, cachedTenants, "Tenant (optional)");
+    function formatStatus(status) {
+      return (status || '').replace(/_/g,' ');
     }
 
     async function loadUnits() {
-      const res = await fetch("/admin/units");
-      const data = await res.json();
-      cachedUnits = data.items || [];
-      unitsBox.textContent = JSON.stringify(cachedUnits, null, 2);
-      populateSelect(unitSelect, cachedUnits, "Unit (optional)");
+      const { items } = await fetchJson('/admin/units');
+      state.units = items || [];
+      renderUnits();
+      fillUnitSelects();
     }
 
-    async function refreshList() {
-      const res = await fetch("/maintenance/list");
-      const data = await res.json();
-      cachedItems = data.items || [];
-      if (!selectedId && cachedItems.length) {
-        selectedId = cachedItems[0].id;
-      }
-      renderAll();
+    async function loadTenants() {
+      const { items } = await fetchJson('/admin/tenants');
+      state.tenants = items || [];
+      renderTenants();
     }
 
-    async function postMaintenance(asNew = false) {
-      const tenantMessage = document.getElementById("tenantMessage").value.trim();
-      const tenantId = tenantSelect.value || undefined;
-      const unitId = unitSelect.value || undefined;
-      if (!tenantMessage) {
-        statusEl.textContent = "Message required";
-        statusEl.style.color = "var(--danger)";
-        return null;
-      }
-      statusEl.textContent = "Sending...";
-      statusEl.style.color = "var(--muted)";
+    async function loadContractors() {
+      const { items } = await fetchJson('/admin/contractors');
+      state.contractors = items || [];
+      renderContractors();
+    }
+
+    async function loadMaintenance(filter = {}) {
+      const qs = new URLSearchParams();
+      if (filter.status) qs.set('status', filter.status);
+      const url = `/maintenance/list${qs.toString() ? `?${qs.toString()}` : ''}`;
+      const result = await fetchJson(url);
+      state.dbEnabled = result.dbEnabled !== false;
+      state.maintenance = result.items || [];
+      renderMaintenance();
+      renderMaintUnitSummary();
+      renderAutopilotTable();
+      renderMissionCards();
+      renderCharts();
+    }
+
+    async function loadUtilities() {
+      const { items } = await fetchJson('/admin/utilities/bills');
+      state.utilityBills = items || [];
+      renderUtilities();
+    }
+
+    async function loadUtilCreds() {
+      const { items } = await fetchJson('/admin/utilities/credentials');
+      state.utilityCreds = items || [];
+      renderUtilityCreds();
+    }
+
+    async function loadHealth() {
       try {
-        const res = await fetch("/maintenance", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ tenantMessage, tenantId, unitId }),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || "Request failed");
-        statusEl.textContent = "Submitted. Maintenance ID: " + (data.maintenanceId || "(none)");
-        statusEl.style.color = "var(--accent)";
-        showToast("Request submitted");
-        if (data.maintenanceId) {
-          selectedId = data.maintenanceId;
-          assistantThreads[data.maintenanceId] = [];
-        }
-        document.getElementById("tenantMessage").value = "";
-        await refreshList();
-        return data.maintenanceId || null;
+        const res = await fetchJson('/admin/health');
+        state.health = res || state.health;
+        renderHealth();
       } catch (err) {
-        statusEl.textContent = err.message;
-        statusEl.style.color = "var(--danger)";
-        showToast(err.message, true);
-        return null;
+        // keep previous state
       }
     }
 
-    async function postChat(role) {
-      const content = document.getElementById(role === "landlord" ? "landlordDraft" : "tenantMessage").value.trim();
-      if (!content) return showToast("Message required", true);
-      if (role === "landlord") {
-        if (!selectedId) return showToast("Select a request first", true);
-        if (!assistantReady) return showToast("Apply an assistant suggestion before sending", true);
-      }
-      let id = selectedId;
-      if (!id) {
-        id = await postMaintenance(true);
-        if (!id) return null;
-      }
-      const res = await fetch(`/maintenance/${id}/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ role, content }),
+    async function loadReminders() {
+      const { items } = await fetchJson('/admin/reminders');
+      state.reminders = items || [];
+      renderReminders();
+    }
+
+    function renderUnits() {
+      const tbody = document.querySelector('#unitTable tbody');
+      if (!state.units.length) { tbody.innerHTML = '<tr><td colspan="4" class="muted">No units</td></tr>'; return; }
+      tbody.innerHTML = state.units.map((u) => `<tr><td>${u.label}</td><td>${u.address}</td><td>${new Date(u.createdAt).toLocaleDateString()}</td><td><button class="btn btn-ghost unit-edit" data-id="${u.id}">Edit</button><button class="btn btn-ghost unit-delete" data-id="${u.id}">Delete</button></td></tr>`).join('');
+    }
+
+    function renderTenants() {
+      const tbody = document.querySelector('#tenantTable tbody');
+      if (!state.tenants.length) { tbody.innerHTML = '<tr><td colspan="5" class="muted">No tenants</td></tr>'; return; }
+      tbody.innerHTML = state.tenants.map((t) => {
+        const unitId = t.unitId || (t.units && t.units[0]?.unitId);
+        const unit = state.units.find((u) => u.id === unitId) || {};
+        return `<tr><td>${t.name}</td><td>${t.phone || '-'}</td><td>${t.email || '-'}</td><td>${unit.label || '-'}</td><td><button class="btn btn-ghost tenant-edit" data-id="${t.id}">Edit</button><button class="btn btn-ghost tenant-delete" data-id="${t.id}">Delete</button></td></tr>`;
+      }).join('');
+    }
+
+    function renderContractors() {
+      const tbody = document.querySelector('#contractorTable tbody');
+      if (!state.contractors.length) { tbody.innerHTML = '<tr><td colspan="5" class="muted">No contractors</td></tr>'; return; }
+      tbody.innerHTML = state.contractors.map((c) => `<tr><td>${c.name}</td><td>${c.phone}</td><td>${c.email || '-'}</td><td>${c.role || '-'}</td><td><button class="btn btn-ghost contractor-edit" data-id="${c.id}">Edit</button><button class="btn btn-ghost contractor-delete" data-id="${c.id}">Delete</button></td></tr>`).join('');
+    }
+
+    function renderReminders() {
+      const tbody = document.querySelector('#reminderTable tbody');
+      if (!state.reminders.length) { tbody.innerHTML = '<tr><td colspan="5" class="muted">No reminders yet.</td></tr>'; return; }
+      tbody.innerHTML = state.reminders.map((r) => `<tr><td>${r.type}</td><td>${r.dayOfMonth}</td><td>${r.timeUtc}</td><td>${r.style}</td><td><button class="btn btn-ghost reminder-delete" data-id="${r.id}">Delete</button></td></tr>`).join('');
+    }
+
+    function renderMaintUnitSummary() {
+      const tbody = document.querySelector('#maintUnitTable tbody');
+      if (!state.maintenance.length) { tbody.innerHTML = '<tr><td colspan="5" class="muted">No maintenance records</td></tr>'; return; }
+      const counts = {};
+      state.maintenance.forEach((m)=>{
+        const key = m.unitId || 'Unassigned';
+        if(!counts[key]) counts[key] = { pending:0, triage:0, scheduled:0, open:0 };
+        if(m.status==='PENDING') counts[key].pending++;
+        else if(m.status==='IN_TRIAGE') counts[key].triage++;
+        else if(m.status==='SCHEDULED') counts[key].scheduled++;
+        else if(m.status==='OPEN') counts[key].open++;
       });
-      const data = await res.json();
-      if (!res.ok) {
-        showToast(data.error || "Chat failed", true);
-        return null;
-      }
-      const fresh = await fetchItem(id);
-      mergeUpdatedItem(fresh || data.item);
-      if (role !== "landlord") document.getElementById("tenantMessage").value = "";
-      if (role === "landlord") clearAssistantReadyState(id);
-      showToast("Message sent");
-      renderAll();
-      return data.item?.id || null;
+      tbody.innerHTML = Object.entries(counts).map(([unitId, data])=>{
+        const unit = state.units.find((u)=>u.id===unitId) || {};
+        return `<tr><td>${unit.label || unitId}</td><td>${data.pending}</td><td>${data.triage}</td><td>${data.scheduled}</td><td>${data.open}</td></tr>`;
+      }).join('');
     }
 
-    async function refineAiDraft() {
-      if (!selectedId) return showToast("Select a request", true);
-      const instructions = (refineInstructions?.value || "").trim();
-      if (!instructions) return showToast("Add instructions for the AI", true);
-      const baseText = useLandlordEdits?.checked ? landlordDraft.value.trim() : undefined;
-      try {
-        const res = await fetch(`/maintenance/${selectedId}/refine`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ instructions, baseText }),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || "Refine failed");
-        if (data.maintenance) mergeUpdatedItem(data.maintenance);
-        if (data.draft?.draft) landlordDraft.value = data.draft.draft;
-        if (refineInstructions) refineInstructions.value = "";
-        if (useLandlordEdits) useLandlordEdits.checked = false;
-        clearAssistantReadyState(selectedId);
-        showToast("Draft refined");
-        renderAll();
-      } catch (err) {
-        showToast(err.message || "Refine failed", true);
-      }
+    function renderAutopilotTable() {
+      const tbody = document.querySelector('#autopilotTable tbody');
+      if (!state.maintenance.length) { tbody.innerHTML = '<tr><td colspan="4" class="muted">No maintenance records</td></tr>'; return; }
+      tbody.innerHTML = state.maintenance.map((m)=>{
+        const tenant = state.tenants.find((t)=>t.id===m.tenantId) || {};
+        const unit = state.units.find((u)=>u.id===m.unitId) || {};
+        const severity = severityOf(m);
+        const enabled = !!m.autopilotEnabled;
+        const status = m.autopilotStatus || (enabled ? 'idle' : 'off');
+        return `<tr><td>${unit.label || '-'}</td><td>${tenant.name || '-'}</td><td>${severity}</td><td><button class="btn btn-ghost autopilot-toggle" data-id="${m.id}" data-enabled="${enabled}">${enabled ? 'On' : 'Off'} · ${status}</button></td></tr>`;
+      }).join('');
     }
 
-    async function sendAssistantPrompt() {
-      if (!selectedId) return showToast("Select a request", true);
-      const prompt = (assistantPrompt?.value || "").trim();
-      if (!prompt) return showToast("Add a question for the assistant", true);
-      assistantPrompt.value = "";
-      clearAssistantReadyState(selectedId);
-      pushAssistantEntry(selectedId, { role: "landlord", content: prompt });
-      renderAssistantFeed();
-      if (assistantSend) {
-        assistantSend.disabled = true;
-        assistantSend.textContent = "Thinking...";
-      }
-      try {
-        const payload = { instructions: prompt };
-        const baseDraft = landlordDraft?.value?.trim();
-        if (assistantUseDraft?.checked && baseDraft) {
-          payload.baseText = baseDraft;
-        }
-        const res = await fetch(`/maintenance/${selectedId}/advisor`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || "Assistant request failed");
-        const suggestionPayload = data?.suggestion;
-        let analysisText = "";
-        let draftedReply = "";
-        let suggestionId = suggestionPayload?.generatedAt || `advisor-${Date.now()}`;
-        if (suggestionPayload && typeof suggestionPayload === "object") {
-          analysisText = suggestionPayload.analysis || suggestionPayload.suggestion || "";
-          draftedReply = suggestionPayload.reply || suggestionPayload.draft || "";
-        } else if (typeof suggestionPayload === "string") {
-          analysisText = suggestionPayload;
-        }
-        if (analysisText) {
-          pushAssistantEntry(selectedId, {
-            role: "assistant",
-            content: analysisText,
-            createdAt: suggestionPayload?.generatedAt,
-            id: `${suggestionId}-analysis`,
-            meta: { kind: "analysis" },
-          });
-        }
-        if (draftedReply) {
-          pushAssistantEntry(selectedId, {
-            role: "assistant",
-            content: draftedReply,
-            createdAt: suggestionPayload?.generatedAt,
-            id: `${suggestionId}-reply`,
-            meta: { draftText: draftedReply, kind: "reply" },
-          });
-        }
-        if (data?.maintenance) mergeUpdatedItem(data.maintenance);
-        if (!analysisText && !draftedReply) {
-          pushAssistantEntry(selectedId, {
-            role: "assistant",
-            content: "Couldn't come up with a fresh angle—try rephrasing your ask.",
-            createdAt: suggestionPayload?.generatedAt,
-            id: `${suggestionId}-fallback`,
-            meta: { kind: "analysis" },
-          });
-        }
-        if (draftedReply) {
-          showToast("Assistant prepared a reply — click Add to draft");
-        } else {
-          showToast("Assistant shared feedback");
-        }
-        renderAssistantFeed();
-      } catch (err) {
-        showToast(err.message || "Assistant request failed", true);
-      } finally {
-        if (assistantSend) {
-          assistantSend.disabled = false;
-          assistantSend.textContent = "Ask assistant";
-        }
-      }
+    function renderMaintenance() {
+      const tbody = document.querySelector('#maintTable tbody');
+      if (!state.maintenance.length) { tbody.innerHTML = '<tr><td colspan="7" class="muted">No maintenance records</td></tr>'; return; }
+      tbody.innerHTML = state.maintenance.map((m) => {
+        const tenant = state.tenants.find((t) => t.id === m.tenantId) || {};
+        const unit = state.units.find((u) => u.id === m.unitId) || {};
+        const severity = severityOf(m);
+        const draft = (m.aiDraft && m.aiDraft.draft) || '';
+        return `<tr>
+          <td>${unit.label || '-'}</td>
+          <td>${tenant.name || '-'}</td>
+          <td>${formatStatus(m.status)}</td>
+          <td>${severity}</td>
+          <td>${(m.message || '').slice(0,80)}</td>
+          <td>${new Date(m.updatedAt || m.createdAt).toLocaleString()}</td>
+          <td>
+            <div class="flex" style="gap:6px;flex-wrap:wrap;">
+              <button class="btn btn-ghost maint-status" data-id="${m.id}" data-status="PENDING">Pending</button>
+              <button class="btn btn-ghost maint-status" data-id="${m.id}" data-status="IN_TRIAGE">In Triage</button>
+              <button class="btn btn-ghost maint-status" data-id="${m.id}" data-status="SCHEDULED">Scheduled</button>
+              <button class="btn btn-ghost maint-status" data-id="${m.id}" data-status="IN_PROGRESS">In Progress</button>
+              <button class="btn btn-ghost maint-status" data-id="${m.id}" data-status="RESOLVED">Resolve</button>
+              <button class="btn btn-ghost maint-status" data-id="${m.id}" data-status="CANCELLED">Cancel</button>
+              <button class="btn btn-ghost autopilot-toggle" data-id="${m.id}" data-enabled="${!!m.autopilotEnabled}">${m.autopilotEnabled ? 'Autopilot: On' : 'Autopilot: Off'}</button>
+              <button class="btn btn-ghost maint-delete" data-id="${m.id}">Delete</button>
+              <button class="btn btn-primary maint-draft-send" data-id="${m.id}" data-draft="${encodeURIComponent(draft)}">Edit/Send</button>
+            </div>
+          </td>
+        </tr>`;
+      }).join('');
     }
 
-    function clearAssistantThread() {
-      if (!selectedId) return showToast("Select a request", true);
-      assistantThreads[selectedId] = [];
-      clearAssistantReadyState(selectedId);
-      renderAssistantFeed();
+    function renderUtilities() {
+      const tbody = document.querySelector('#utilityTable tbody');
+      if (!state.utilityBills.length) { tbody.innerHTML = '<tr><td colspan="5" class="muted">No bills yet</td></tr>'; return; }
+      tbody.innerHTML = state.utilityBills.map((b) => {
+        const unit = state.units.find((u) => u.id === b.unitId) || {};
+        const amount = (b.amountCents || 0) / 100;
+        const periodEnd = b.billingPeriodEnd ? new Date(b.billingPeriodEnd).toLocaleDateString() : '-';
+        return `<tr><td>${unit.label || b.unitId || '-'}</td><td>${b.utilityType}</td><td>$${amount.toFixed(2)} ${b.currency || ''}</td><td>${periodEnd}</td><td><button data-bill="${b.id}" class="btn btn-ghost bill-edit">Edit</button><button data-bill="${b.id}" class="btn btn-ghost bill-delete">Delete</button><button data-bill="${b.id}" class="btn btn-primary bill-send">Send PDF</button></td></tr>`;
+      }).join('');
     }
 
-    function mergeUpdatedItem(item) {
-      if (!item) return;
-      const idx = cachedItems.findIndex((i) => i.id === item.id);
-      if (idx >= 0) {
-        cachedItems[idx] = item;
-      } else {
-        cachedItems.unshift(item);
-      }
+    function renderUtilityCreds() {
+      const tbody = document.querySelector('#utilCredTable tbody');
+      if (!state.utilityCreds.length) { tbody.innerHTML = '<tr><td colspan="5" class="muted">No credentials yet.</td></tr>'; return; }
+      tbody.innerHTML = state.utilityCreds.map((c) => {
+        const unit = state.units.find((u) => u.id === c.unitId) || {};
+        return `<tr><td>${unit.label || c.unitId}</td><td>${c.utilityType}</td><td>${c.username || '-'}</td><td>${c.notes || '-'}</td><td><button data-cred="${c.id}" class="btn btn-ghost cred-edit">Edit</button><button data-cred="${c.id}" class="btn btn-ghost cred-delete">Delete</button></td></tr>`;
+      }).join('');
     }
 
-    function renderTicketBoard(items) {
-      const pending = items.filter((i) => i.status === "OPEN");
-      const backlog = items.filter((i) => i.status === "IN_PROGRESS");
-      const resolved = items.filter((i) => i.status === "RESOLVED");
-      pendingCount.textContent = pending.length;
-      backlogCount.textContent = backlog.length;
-      resolvedCount.textContent = resolved.length;
-      renderTicketList(pendingList, pending);
-      renderTicketList(backlogList, backlog);
-      renderTicketList(resolvedList, resolved);
+    function renderMissionCards() {
+      const dbState = document.getElementById('dbState');
+      dbState.textContent = state.dbEnabled ? 'DB: ready' : 'DB: disabled';
+      const active = state.maintenance.filter((m) => ACTIVE_STATUSES.includes(m.status));
+      const resolved = state.maintenance.filter((m) => m.status === 'RESOLVED');
+      document.getElementById('cardIssues').textContent = state.maintenance.length;
+      document.getElementById('cardIssuesBreakdown').textContent = `${active.length} active / ${resolved.length} resolved`;
+      const pending = state.maintenance.filter((m)=>['PENDING','IN_TRIAGE','SCHEDULED'].includes(m.status));
+      document.getElementById('cardPending').textContent = pending.length || '--';
+      document.getElementById('cardPendingBreakdown').textContent = `${pending.length} pending/triage/scheduled`;
+
+      const countsByUnit = state.maintenance.reduce((acc, m) => {
+        if (!m.unitId) return acc; acc[m.unitId] = (acc[m.unitId] || 0) + 1; return acc;
+      }, {});
+      const topUnit = Object.entries(countsByUnit).sort((a,b)=>b[1]-a[1])[0];
+      document.getElementById('cardUnits').textContent = Object.keys(countsByUnit).length || '--';
+      document.getElementById('cardTopUnit').textContent = topUnit ? `${(state.units.find((u)=>u.id===topUnit[0])||{}).label || topUnit[0]} · ${topUnit[1]} issues` : 'No open units';
+
+      const totalUtility = state.utilityBills.reduce((sum,b)=>sum+(b.amountCents||0),0)/100;
+      document.getElementById('cardUtility').textContent = `$${totalUtility.toFixed(2)}`;
+      document.getElementById('cardUtilityNotes').textContent = state.utilityBills.length ? `${state.utilityBills.length} bills` : 'No bills';
+
+      document.getElementById('cardTenants').textContent = state.tenants.length;
+      document.getElementById('cardUnitsTenants').textContent = `${state.units.length} units`;
     }
 
-    function renderTicketList(node, list) {
-      if (!node) return;
-      if (!list.length) {
-        node.innerHTML = '<li class="muted">None</li>';
-        return;
-      }
-      node.innerHTML = list.slice(0, 6)
-        .map((item) => {
-          const summary = (item.message || "").slice(0, 60);
-          return `<li data-id="${item.id}"><strong>${item.unitId || "Unit?"}</strong><div>${summary}</div></li>`;
-        })
-        .join("");
-    }
-
-    async function updateStatus(status) {
-      const id = selectedId;
-      if (!id) return showToast("Select a request", true);
-      const res = await fetch(`/admin/maintenance/${id}/status`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status }),
-      });
-      const data = await res.json();
-      if (!res.ok) return showToast("Status update failed", true);
-      mergeUpdatedItem(data.maintenance);
-      const fresh = await fetchItem(id);
-      if (fresh) mergeUpdatedItem(fresh);
-      showToast(`Status -> ${status}`);
-      renderAll();
-    }
-
-    async function toggleAutopilot(enabled) {
-      const id = selectedId;
-      if (!id) return showToast("Select a request", true);
-      try {
-        const res = await fetch(`/maintenance/${id}/autopilot`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ enabled, runNow: true }),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || "Autopilot toggle failed");
-        if (data.maintenance) mergeUpdatedItem(data.maintenance);
-        renderAll();
-        showToast(enabled ? "Autopilot enabled" : "Autopilot disabled");
-      } catch (err) {
-        showToast(err.message || "Autopilot toggle failed", true);
-      }
-    }
-
-    async function createTenant() {
-      const id = document.getElementById("newTenantId").value.trim() || undefined;
-      const name = document.getElementById("newTenantName").value.trim();
-      const phone = document.getElementById("newTenantPhone").value.trim() || undefined;
-      const email = document.getElementById("newTenantEmail").value.trim() || undefined;
-      if (!name) return showToast("Tenant name required", true);
-      const res = await fetch("/admin/tenants", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, name, phone, email }),
-      });
-      const data = await res.json();
-      if (!res.ok) return showToast("Tenant create failed", true);
-      showToast("Tenant created: " + (data.tenant?.id || "unknown"));
-      await loadTenants();
-    }
-
-    async function createUnit() {
-      const id = document.getElementById("newUnitId").value.trim() || undefined;
-      const label = document.getElementById("newUnitLabel").value.trim();
-      const address = document.getElementById("newUnitAddress").value.trim();
-      if (!label || !address) return showToast("Label and address required", true);
-      const res = await fetch("/admin/units", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, label, address }),
-      });
-      const data = await res.json();
-      if (!res.ok) return showToast("Unit create failed", true);
-      showToast("Unit created: " + (data.unit?.id || "unknown"));
-      await loadUnits();
-    }
-
-    // Event wiring
-    landlordDraft?.addEventListener("input", () => {
-      if (suppressDraftWatcher) return;
-      clearAssistantReadyState(selectedId);
-    });
-    document.getElementById("sendTenant").onclick = () => postChat("tenant");
-    document.getElementById("startNew").onclick = () => { selectedId = null; renderAll(); postMaintenance(true); };
-    document.getElementById("sendLandlord").onclick = () => postChat("landlord");
-    document.getElementById("useDraft").onclick = () => {
-      const item = getSelectedItem();
-      if (!item || !item.aiDraft?.draft) return showToast("No AI draft", true);
-      landlordDraft.value = item.aiDraft.draft;
-      clearAssistantReadyState(selectedId);
-    };
-    document.getElementById("refineDraftBtn").onclick = refineAiDraft;
-    document.getElementById("markResolved").onclick = () => updateStatus("RESOLVED");
-    document.getElementById("markInProgress").onclick = () => updateStatus("IN_PROGRESS");
-    if (autopilotToggle) {
-      autopilotToggle.onclick = () => {
-        const item = getSelectedItem();
-        const next = !item?.autopilotEnabled;
-        toggleAutopilot(next);
+    function renderHealth() {
+      const apply = (id, value) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.textContent = `${el.textContent.split(':')[0]}: ${value}`;
+        el.className = `chip ${value === 'connected' ? 'pill success' : 'pill warn'}`;
       };
+      apply('connLlm', state.health.llm || 'unknown');
+      apply('connWhatsapp', state.health.whatsapp || 'unknown');
+      apply('connUtility', state.health.utility || 'unknown');
+      apply('connJeffy', state.health.jeffy || 'unknown');
     }
-    assistantSend?.addEventListener("click", sendAssistantPrompt);
-    assistantPrompt?.addEventListener("keydown", (event) => {
-      if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
-        event.preventDefault();
-        sendAssistantPrompt();
-      }
-    });
-    assistantClear?.addEventListener("click", clearAssistantThread);
-    manualApproveBtn?.addEventListener("click", markManualDraftReady);
-    assistantFeed?.addEventListener("click", (event) => {
-      const applyBtn = event.target.closest(".apply-suggestion");
-      if (!applyBtn || !selectedId) return;
-      const entryId = applyBtn.getAttribute("data-entry-id");
-      const thread = ensureAssistantThread(selectedId);
-      const entry = thread.find((node) => node.id === entryId);
-      if (!entry) return;
-      const draftText = entry.meta?.draftText || entry.content;
-      if (!draftText) return showToast("No ready draft to apply", true);
-      applyAssistantDraft(draftText);
-      showToast("Assistant draft applied");
-    });
-    conversationSelect.onchange = async (e) => {
-      selectedId = e.target.value || null;
-      if (selectedId) {
-        const fresh = await fetchItem(selectedId);
-        if (fresh) mergeUpdatedItem(fresh);
-      }
-      renderAll();
-    };
-    reviewSelect.onchange = async (e) => {
-      selectedId = e.target.value || null;
-      if (selectedId) {
-        const fresh = await fetchItem(selectedId);
-        if (fresh) mergeUpdatedItem(fresh);
-      }
-      renderAll();
-    };
-    ticketBoard?.addEventListener("click", async (e) => {
-      const target = e.target.closest("li[data-id]");
-      if (!target) return;
-      selectedId = target.getAttribute("data-id");
-      if (selectedId) {
-        const fresh = await fetchItem(selectedId);
-        if (fresh) mergeUpdatedItem(fresh);
-      }
-      renderAll();
+
+    let chartStatus, chartUtility, chartUnitIssues;
+    function renderCharts() {
+      const statusLabels = ['OPEN','PENDING','IN_TRIAGE','SCHEDULED','IN_PROGRESS','RESOLVED','CANCELLED'];
+      const statusCounts = statusLabels.map((s)=>state.maintenance.filter((m)=>m.status===s).length);
+      chartStatus && chartStatus.destroy();
+      chartStatus = new Chart(document.getElementById('chartStatus'), {
+        type: 'bar', data: { labels: ['Open','Pending','In Triage','Scheduled','In Progress','Resolved','Cancelled'], datasets:[{ label:'Tickets', data: statusCounts, backgroundColor:['#ff8a4c','#f5a524','#9aa3b5','#1f9eff','#ffb86c','#3ecf8e','#9aa3b5'] }]}, options:{ plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true}} }
+      });
+
+      const utilityByUnit = {};
+      state.utilityBills.forEach((b)=>{ const key=b.unitId||'unknown'; utilityByUnit[key]=(utilityByUnit[key]||0)+ (b.amountCents||0)/100; });
+      chartUtility && chartUtility.destroy();
+      chartUtility = new Chart(document.getElementById('chartUtility'), {
+        type:'pie', data:{ labels:Object.keys(utilityByUnit), datasets:[{ data:Object.values(utilityByUnit), backgroundColor:['#1f9eff','#ff8a4c','#3ecf8e','#9aa3b5','#f5a524'] }]}, options:{ plugins:{legend:{position:'bottom'}} }
+      });
+
+      const issuesByUnit = {};
+      state.maintenance.forEach((m)=>{ if(ACTIVE_STATUSES.includes(m.status)){ const key=m.unitId||'Unassigned'; issuesByUnit[key]=(issuesByUnit[key]||0)+1; }});
+      chartUnitIssues && chartUnitIssues.destroy();
+      chartUnitIssues = new Chart(document.getElementById('chartUnitIssues'), {
+        type:'bar', data:{ labels:Object.keys(issuesByUnit), datasets:[{ data:Object.values(issuesByUnit), backgroundColor:'#1f9eff' }]}, options:{ plugins:{legend:{display:false}}, indexAxis:'y', scales:{x:{beginAtZero:true}} }
+      });
+
+      const notifications = document.getElementById('notifications');
+      notifications.innerHTML = state.maintenance.slice(0,5).map((m)=>{
+        const tenant = state.tenants.find((t)=>t.id===m.tenantId) || {}; const unit = state.units.find((u)=>u.id===m.unitId) || {}; 
+        return `<li><strong>${tenant.name || 'Unknown'} · ${unit.label || 'No unit'}</strong><div class="muted">${m.status} · ${new Date(m.updatedAt||m.createdAt).toLocaleString()}</div></li>`;
+      }).join('');
+    }
+
+    function fillUnitSelects() {
+      const selects = [document.getElementById('tenantUnit'), document.getElementById('utilUnit'), document.getElementById('billUnit')];
+      selects.forEach((sel)=>{ if(!sel) return; sel.innerHTML = '<option value="">Select unit</option>' + state.units.map((u)=>`<option value="${u.id}">${u.label}</option>`).join(''); });
+    }
+
+    document.getElementById('createUnitBtn').addEventListener('click', async ()=>{
+      const label = (document.getElementById('unitLabel').value || '').trim();
+      const address = (document.getElementById('unitAddress').value || '').trim();
+      if(!label || !address) return toast('Unit label and address required');
+      await fetchJson('/admin/units', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ label, address })});
+      toast('Unit created');
+      document.getElementById('unitLabel').value=''; document.getElementById('unitAddress').value='';
+      loadUnits();
     });
 
-    document.getElementById("createTenant").onclick = createTenant;
-    document.getElementById("createUnit").onclick = createUnit;
-    document.getElementById("loadTenants").onclick = loadTenants;
-    document.getElementById("loadUnits").onclick = loadUnits;
+    document.getElementById('createTenantBtn').addEventListener('click', async ()=>{
+      const name = (document.getElementById('tenantName').value || '').trim();
+      const phone = (document.getElementById('tenantPhone').value || '').trim();
+      const email = (document.getElementById('tenantEmail').value || '').trim();
+      const unitId = (document.getElementById('tenantUnit').value || '').trim();
+      if(!name) return toast('Tenant name required');
+      await fetchJson('/admin/tenants', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ name, phone, email, unitId: unitId || undefined })});
+      toast('Tenant created');
+      ['tenantName','tenantPhone','tenantEmail'].forEach((id)=>document.getElementById(id).value='');
+      loadTenants();
+    });
 
-    refreshList();
-    loadTenants();
-    loadUnits();
+    document.getElementById('createContractorBtn').addEventListener('click', async ()=>{
+      const name = (document.getElementById('contractorName').value || '').trim();
+      const phone = (document.getElementById('contractorPhone').value || '').trim();
+      const email = (document.getElementById('contractorEmail').value || '').trim();
+      const role = (document.getElementById('contractorRole').value || '').trim();
+      if(!name || !phone) return toast('Contractor name and phone required');
+      await fetchJson('/admin/contractors', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ name, phone, email, role })});
+      toast('Contractor added');
+      ['contractorName','contractorPhone','contractorEmail','contractorRole'].forEach((id)=>document.getElementById(id).value='');
+      loadContractors();
+    });
+
+    document.getElementById('saveUtilCred').addEventListener('click', async ()=>{
+      const unitId = document.getElementById('utilUnit').value;
+      const utilityType = document.getElementById('utilType').value;
+      const username = document.getElementById('utilUser').value;
+      const password = document.getElementById('utilPass').value;
+      const notes = document.getElementById('utilNotes').value;
+      if(!unitId) return toast('Select unit for utility credential');
+      await fetchJson('/admin/utilities/credentials', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ unitId, utilityType, username, password, notes })});
+      toast('Utility credential saved');
+      loadUtilCreds();
+    });
+
+    document.getElementById('saveBill').addEventListener('click', async ()=>{
+      const unitId = document.getElementById('billUnit').value || undefined;
+      const utilityType = document.getElementById('billType').value;
+      const amountCents = Math.round(((Number(document.getElementById('billAmount').value) || 0) * 100));
+      const currency = document.getElementById('billCurrency').value || 'CAD';
+      const billingPeriodEnd = document.getElementById('billPeriodEnd').value || undefined;
+      const statementUrl = document.getElementById('billStatement').value || undefined;
+      await fetchJson('/admin/utilities/bills', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ unitId, utilityType, amountCents, currency, billingPeriodEnd, statementUrl })});
+      toast('Bill saved');
+      loadUtilities();
+    });
+
+    document.getElementById('testWhatsapp').addEventListener('click', async ()=>{
+      try {
+        const to = document.getElementById('testWhatsappTo').value.trim();
+        const message = document.getElementById('testWhatsappMsg').value.trim();
+        if(!to || !message) return toast('Number and message required');
+        const res = await fetchJson('/admin/whatsapp/test', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ to, message })});
+        document.getElementById('whatsappStatus').textContent = `Sent: ${JSON.stringify(res.response || res)}`;
+        toast('Test sent');
+      } catch (err) {
+        document.getElementById('whatsappStatus').textContent = `Failed: ${err.message}`;
+        toast('WhatsApp test failed');
+      }
+    });
+
+    document.getElementById('saveLandlordNumbers').addEventListener('click', async ()=>{
+      const numbers = document.getElementById('landlordNumbers').value || '';
+      const res = await fetchJson('/admin/landlord-numbers', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ numbers })});
+      document.getElementById('landlordNumbersStatus').textContent = `Saved: ${res.numbers.join(', ')}`;
+      toast('Landlord numbers saved');
+    });
+
+    document.getElementById('refreshBtn').addEventListener('click', () => {
+      loadAll();
+      toast('Refreshed');
+    });
+    document.getElementById('addUnitShortcut').addEventListener('click', ()=> showView('units'));
+    document.getElementById('refreshUnits').addEventListener('click', loadUnits);
+    document.getElementById('refreshTenants').addEventListener('click', loadTenants);
+    document.getElementById('refreshContractors').addEventListener('click', loadContractors);
+    document.getElementById('refreshUtilities').addEventListener('click', ()=>{ loadUtilities(); loadUtilCreds(); });
+    document.getElementById('refreshMaint').addEventListener('click', ()=> loadMaintenance({ status: document.getElementById('maintStatusFilter').value || undefined }));
+    document.getElementById('maintStatusFilter').addEventListener('change', (e)=> loadMaintenance({ status: e.target.value || undefined }));
+
+    document.getElementById('saveReminder').addEventListener('click', async ()=>{
+      const type = document.getElementById('reminderType').value;
+      const dayOfMonth = Number(document.getElementById('reminderDay').value);
+      const timeUtc = (document.getElementById('reminderTime').value || '').trim();
+      const style = document.getElementById('reminderStyle').value;
+      if(!dayOfMonth || !timeUtc) return toast('Day and time required');
+      await fetchJson('/admin/reminders', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ type, dayOfMonth, timeUtc, style })});
+      toast('Reminder saved');
+      loadReminders();
+    });
+    document.getElementById('refreshReminders').addEventListener('click', loadReminders);
+
+    document.getElementById('assistantSend').addEventListener('click', ()=>{
+      const val = document.getElementById('assistantInput').value.trim();
+      if(!val) return; 
+      const log = document.getElementById('assistantLog');
+      const now = new Date().toLocaleTimeString();
+      const entry = document.createElement('div');
+      entry.innerHTML = `<strong>You</strong> <span class="muted">${now}</span><div>${val}</div><div class="muted">(Connect to advisor endpoint for live responses)</div>`;
+      if (log.firstChild && log.firstChild.classList?.contains('muted')) log.innerHTML = '';
+      log.prepend(entry);
+      document.getElementById('assistantInput').value = '';
+    });
+
+    document.body.addEventListener('click', async (e)=>{
+      const target = e.target;
+      if (!(target instanceof HTMLElement)) return;
+      if (target.classList.contains('unit-edit')) {
+        const id = target.dataset.id;
+        const unit = state.units.find((u)=>u.id===id);
+        if(!unit) return;
+        const label = prompt('Unit label', unit.label);
+        const address = prompt('Unit address', unit.address);
+        await fetchJson(`/admin/units/${id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ label, address })});
+        toast('Unit updated');
+        loadUnits();
+      }
+      if (target.classList.contains('unit-delete')) {
+        const id = target.dataset.id;
+        if (!id) return; if(!confirm('Delete unit?')) return;
+        await fetchJson(`/admin/units/${id}`, { method:'DELETE' });
+        toast('Unit deleted');
+        loadUnits();
+      }
+      if (target.classList.contains('tenant-edit')) {
+        const id = target.dataset.id;
+        const tenant = state.tenants.find((t)=>t.id===id);
+        if(!tenant) return;
+        const name = prompt('Name', tenant.name);
+        const phone = prompt('Phone', tenant.phone || '');
+        const email = prompt('Email', tenant.email || '');
+        await fetchJson(`/admin/tenants/${id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ name, phone, email })});
+        toast('Tenant updated');
+        loadTenants();
+      }
+      if (target.classList.contains('tenant-delete')) {
+        const id = target.dataset.id; if(!id) return;
+        if(!confirm('Hard delete tenant?')) return;
+        await fetchJson(`/admin/tenants/${id}`, { method:'DELETE' });
+        toast('Tenant deleted');
+        loadTenants();
+      }
+      if (target.classList.contains('contractor-edit')) {
+        const id = target.dataset.id;
+        const c = state.contractors.find((c)=>c.id===id); if(!c) return;
+        const name = prompt('Name', c.name);
+        const phone = prompt('Phone', c.phone);
+        const email = prompt('Email', c.email || '');
+        const role = prompt('Role', c.role || '');
+        await fetchJson(`/admin/contractors/${id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ name, phone, email, role })});
+        toast('Contractor updated');
+        loadContractors();
+      }
+      if (target.classList.contains('contractor-delete')) {
+        const id = target.dataset.id; if(!id) return;
+        if(!confirm('Delete contractor?')) return;
+        await fetchJson(`/admin/contractors/${id}`, { method:'DELETE' });
+        toast('Contractor deleted');
+        loadContractors();
+      }
+      if (target.classList.contains('maint-status')) {
+        const id = target.dataset.id; const status = target.dataset.status;
+        if (!id || !status) return;
+        await fetchJson(`/admin/maintenance/${id}/status`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ status })});
+        toast(`Status -> ${status}`);
+        loadMaintenance();
+      }
+      if (target.classList.contains('maint-delete')) {
+        const id = target.dataset.id; if(!id) return;
+        if(!confirm('Delete maintenance ticket?')) return;
+        await fetchJson(`/admin/maintenance/${id}`, { method:'DELETE' });
+        toast('Ticket deleted');
+        loadMaintenance();
+      }
+      if (target.classList.contains('maint-draft-send')) {
+        const id = target.dataset.id; if(!id) return;
+        const encoded = target.dataset.draft || '';
+        const existing = decodeURIComponent(encoded || '');
+        const draft = prompt('Edit message before sending', existing) || existing;
+        if(!draft.trim()) return toast('No message to send');
+        await fetchJson(`/maintenance/${id}/chat`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ role:'landlord', content: draft })});
+        toast('Draft sent');
+        loadMaintenance();
+      }
+      if (target.classList.contains('autopilot-toggle')) {
+        const id = target.dataset.id; if(!id) return;
+        const enabled = target.dataset.enabled === 'true';
+        const note = prompt('Reason (optional)', enabled ? 'Turning off' : 'Turning on') || undefined;
+        await fetchJson(`/maintenance/${id}/autopilot`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ enabled: !enabled, reason: note, runNow: !enabled })});
+        toast(`Autopilot ${!enabled ? 'enabled' : 'disabled'}`);
+        loadMaintenance();
+      }
+      if (target.classList.contains('cred-edit')) {
+        const id = target.dataset.cred;
+        const cred = state.utilityCreds.find((c)=>c.id===id); if(!cred) return;
+        const username = prompt('Username', cred.username || '') ?? undefined;
+        const password = prompt('Password (blank to keep)', cred.password || '') ?? undefined;
+        const notes = prompt('Notes', cred.notes || '') ?? undefined;
+        await fetchJson(`/admin/utilities/credentials/${id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ username, password, notes })});
+        toast('Credential updated');
+        loadUtilCreds();
+      }
+      if (target.classList.contains('cred-delete')) {
+        const id = target.dataset.cred; if(!id) return;
+        if(!confirm('Delete credential?')) return;
+        await fetchJson(`/admin/utilities/credentials/${id}`, { method:'DELETE' });
+        toast('Credential deleted');
+        loadUtilCreds();
+      }
+      if (target.classList.contains('bill-edit')) {
+        const id = target.dataset.bill; const bill = state.utilityBills.find((b)=>b.id===id); if(!bill) return;
+        const amount = prompt('Amount', ((bill.amountCents||0)/100).toString());
+        const statementUrl = prompt('Statement/PDF URL', bill.statementUrl || '') || bill.statementUrl;
+        await fetchJson(`/admin/utilities/bills/${id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ amountCents: Math.round((Number(amount)||0)*100), statementUrl })});
+        toast('Bill updated');
+        loadUtilities();
+      }
+      if (target.classList.contains('bill-delete')) {
+        const id = target.dataset.bill; if(!id) return;
+        if(!confirm('Delete bill?')) return;
+        await fetchJson(`/admin/utilities/bills/${id}`, { method:'DELETE' });
+        toast('Bill deleted');
+        loadUtilities();
+      }
+      if (target.classList.contains('bill-send')) {
+        const id = target.dataset.bill; const bill = state.utilityBills.find((b)=>b.id===id); if(!bill) return;
+        const to = prompt('Send to WhatsApp number');
+        if(!to) return;
+        const msg = prompt('Message', 'Your utility bill is ready');
+        await fetchJson(`/admin/utilities/bills/${id}/send-whatsapp`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ to, statementUrl: bill.statementUrl, message: msg })});
+        toast('Sent via WhatsApp');
+      }
+      if (target.classList.contains('reminder-delete')) {
+        const id = target.dataset.id; if(!id) return;
+        await fetchJson(`/admin/reminders/${id}`, { method:'DELETE' });
+        toast('Reminder deleted');
+        loadReminders();
+      }
+    });
+
+    function loadAll() {
+      loadUnits().then(()=>{
+        fillUnitSelects();
+      });
+      loadTenants();
+      loadContractors();
+      loadMaintenance();
+      loadUtilities();
+      loadUtilCreds();
+      loadHealth();
+      loadReminders();
+    }
+
+    loadAll();
   </script>
 </body>
 </html>

@@ -1,0 +1,27 @@
+{
+  "name": "landlord-ai-agent",
+  "dockerComposeFile": [
+    "../docker-compose.yml",
+    "docker-compose.devcontainer.yml"
+  ],
+  "service": "workspace",
+  "workspaceFolder": "/workspace",
+  "runServices": [
+    "workspace",
+    "postgres",
+    "evolution-postgres",
+    "evolution-redis",
+    "evolution-api",
+    "evolution-frontend"
+  ],
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "20"
+    }
+  ],
+  "overrideCommand": false,
+  "postCreateCommand": "npm install && npm run prisma:generate",
+  "remoteEnv": {
+    "DATABASE_URL": "postgresql://postgres:postgres@postgres:5432/landlord?schema=public"
+  }
+}
