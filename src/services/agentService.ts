@@ -69,9 +69,14 @@ function formatConversationLog(entries?: ConversationEntry[] | null, limit = 10)
 const skillDir = path.join(process.cwd(), ".github", "skills");
 const rtaSkillPath = path.join(skillDir, "rta-compliance", "SKILL.md");
 const billingSkillPath = path.join(skillDir, "utility-billing", "SKILL.md");
+const soulDir = path.join(process.cwd(), ".github", "souls");
+const tenantSoulPath = path.join(soulDir, "tenant-replies.md");
+const landlordSoulPath = path.join(soulDir, "landlord-assistant.md");
 
 let cachedRtaSkill = "";
 let cachedBillingSkill = "";
+let cachedTenantSoul = "";
+let cachedLandlordSoul = "";
 
 function readSkill(filePath: string) {
   try {
@@ -83,10 +88,26 @@ function readSkill(filePath: string) {
   }
 }
 
+function readSoul(filePath: string) {
+  try {
+    return fs.readFileSync(filePath, "utf8");
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn(`Soul file missing: ${filePath}`);
+    return "";
+  }
+}
+
 function loadSkills() {
   if (!cachedRtaSkill) cachedRtaSkill = readSkill(rtaSkillPath);
   if (!cachedBillingSkill) cachedBillingSkill = readSkill(billingSkillPath);
   return { rtaSkill: cachedRtaSkill, billingSkill: cachedBillingSkill };
+}
+
+function loadSouls() {
+  if (!cachedTenantSoul) cachedTenantSoul = readSoul(tenantSoulPath);
+  if (!cachedLandlordSoul) cachedLandlordSoul = readSoul(landlordSoulPath);
+  return { tenantSoul: cachedTenantSoul, landlordSoul: cachedLandlordSoul };
 }
 
 const modelAvailable = () => Boolean(vertexAI);
@@ -137,22 +158,74 @@ function ensureModel() {
   return vertexAI.getGenerativeModel({ model: defaultModel });
 }
 
+function delayMs(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function shouldRetryLlm(err: unknown) {
+  const anyErr = err as { status?: number; statusText?: string; message?: string };
+  const status = anyErr?.status;
+  if (status === 429 || status === 503) return true;
+  const message = `${anyErr?.statusText || ""} ${anyErr?.message || ""}`.toLowerCase();
+  return message.includes("429") || message.includes("503") || message.includes("high demand");
+}
+
+function isLlmFallback(text: string) {
+  return text === "llm_unavailable" || text === "vertex_not_configured";
+}
+
+export async function pingLlm() {
+  const model = ensureModel();
+  if (!model) return false;
+  try {
+    const result = await model.generateContent({
+      contents: [
+        {
+          role: "user",
+          parts: [{ text: "ping" }],
+        },
+      ],
+    });
+    const parts = result.response?.candidates?.[0]?.content?.parts || [];
+    const text = parts.map((p) => (p as { text?: string }).text || "").join("");
+    return Boolean(text.trim());
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn("LLM ping failed", err);
+    return false;
+  }
+}
+
 async function runGemini(prompt: string) {
   const model = ensureModel();
   if (!model) {
     return "vertex_not_configured";
   }
-  const result = await model.generateContent({
-    contents: [
-      {
-        role: "user",
-        parts: [{ text: prompt }],
-      },
-    ],
-  });
-  const parts = result.response?.candidates?.[0]?.content?.parts || [];
-  const text = parts.map((p) => (p as { text?: string }).text || "").join("");
-  return text.trim();
+  const maxAttempts = 3;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      const result = await model.generateContent({
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: prompt }],
+          },
+        ],
+      });
+      const parts = result.response?.candidates?.[0]?.content?.parts || [];
+      const text = parts.map((p) => (p as { text?: string }).text || "").join("");
+      return text.trim();
+    } catch (err) {
+      if (attempt >= maxAttempts || !shouldRetryLlm(err)) {
+        // eslint-disable-next-line no-console
+        console.warn("LLM request failed", err);
+        return "llm_unavailable";
+      }
+      const backoff = 600 * Math.pow(2, attempt - 1);
+      await delayMs(backoff);
+    }
+  }
+  return "llm_unavailable";
 }
 
 function safeParseJSON(text: string) {
@@ -195,6 +268,16 @@ export async function triageMaintenance(params: {
   ].join("\n\n");
 
   const text = await runGemini(prompt);
+  if (isLlmFallback(text)) {
+    return {
+      summary: tenantMessage,
+      classification: { severity: "normal", category: "general", urgencyHours: 72 },
+      recommendedActions: ["Manual review"],
+      dataRequests: [],
+      rawModelText: text,
+    };
+  }
+
   const parsed = safeParseJSON(text);
 
   if (parsed) {
@@ -319,6 +402,7 @@ export async function draftRtaResponse(params: {
   landlordReply?: string | null;
 }): Promise<DraftResult> {
   const { rtaSkill } = loadSkills();
+  const { tenantSoul } = loadSouls();
 
   const basePayload = {
     skillLoaded: Boolean(rtaSkill),
@@ -339,9 +423,10 @@ export async function draftRtaResponse(params: {
 
   const prompt = [
     "You are the landlord-side assistant. Draft a casual, RTA-aware reply for the tenant.",
-    "Keep it short and conversational (1-3 tight paragraphs). Skip subject lines, headings, or bullet points entirely.",
+    "Keep it short and conversational. 2-4 sentences, max 70 words. No headings, bullet points, or signatures.",
     "Confirm you've seen the message, summarize the situation, outline the next concrete step with timing, and stay neutral about fault.",
     "Blend any recommended actions or information requests into normal sentences instead of labeled lists.",
+    tenantSoul ? "--- TENANT SOUL ---\n" + tenantSoul : "",
     "Reference prior tenant or landlord notes so it feels like part of the ongoing chat, and only mention Ontario RTA if it truly helps.",
     "Do not send notices automatically; this is a draft for landlord approval.",
     "--- RTA SKILL ---",
@@ -357,6 +442,15 @@ export async function draftRtaResponse(params: {
   ].join("\n\n");
 
   const draft = await runGemini(prompt);
+
+  if (isLlmFallback(draft)) {
+    return {
+      draft: "LLM temporarily unavailable. Please try again in a few minutes.",
+      ...basePayload,
+      source: "initial",
+      notes: draft,
+    };
+  }
 
   return {
     draft,
@@ -376,6 +470,7 @@ type RefineDraftParams = {
 
 export async function refineDraft(params: RefineDraftParams): Promise<DraftResult> {
   const { rtaSkill } = loadSkills();
+  const { tenantSoul } = loadSouls();
   const trimmedInstructions = (params.instructions || "").trim();
   const baseDraft = (params.baseDraft || "").trim();
   const basePayload = {
@@ -417,9 +512,10 @@ export async function refineDraft(params: RefineDraftParams): Promise<DraftResul
 
   const prompt = [
     "You are the landlord's assistant. Rewrite the draft per the landlord's instructions with an easygoing, human tone.",
-    "Skip headings, subject lines, or bullets; keep it to short sentences or quick paragraphs.",
+    "Keep it short and conversational. 2-4 sentences, max 70 words. No headings, bullet points, or signatures.",
     "Work the triage next steps and any missing info into the prose instead of lists, and keep liability-neutral.",
     "Use conversation history to keep continuity and only mention Ontario RTA if it genuinely supports the point.",
+    tenantSoul ? "--- TENANT SOUL ---\n" + tenantSoul : "",
     "--- TRIAGE ---",
     JSON.stringify(params.triage || {}, null, 2),
     "--- TENANT MESSAGE ---",
@@ -435,6 +531,17 @@ export async function refineDraft(params: RefineDraftParams): Promise<DraftResul
     .join("\n\n");
 
   const refined = await runGemini(prompt);
+
+  if (isLlmFallback(refined)) {
+    return {
+      draft: baseDraft || "LLM temporarily unavailable. Please try again later.",
+      ...basePayload,
+      source: "refine",
+      instructions: trimmedInstructions,
+      baseDraftExcerpt: baseDraft.slice(0, 160),
+      notes: refined,
+    };
+  }
 
   return {
     draft: refined || baseDraft,
@@ -454,8 +561,15 @@ type AdvisorSuggestionParams = {
   landlordReply?: string | null;
 };
 
+type ReminderMessageParams = {
+  type: "rent" | "utility";
+  style: "short" | "medium" | "professional" | "casual";
+  dueLabel?: string;
+};
+
 export async function advisorSuggest(params: AdvisorSuggestionParams) {
   const { rtaSkill } = loadSkills();
+  const { landlordSoul } = loadSouls();
   const trimmedInstructions = (params.instructions || "").trim();
   const baseDraft = (params.baseDraft || params.landlordReply || "").trim();
   const basePayload = {
@@ -481,10 +595,11 @@ export async function advisorSuggest(params: AdvisorSuggestionParams) {
 
   const conversationBlock = formatConversationLog(params.conversationLog, 12);
   const prompt = [
-    "You are the landlord's assistant coach. Return strict JSON with keys analysis and reply.",
-    "analysis: 1-3 short sentences explaining what's missing, risky, or how to improve the tone.",
-    "reply: a friendly, ready-to-send tenant message that fixes the issue. 2-4 sentences, no headings or sign-offs.",
-    "Keep both fields casual and practical, weaving in Ontario RTA only when essential.",
+    "You are the landlord's assistant coach.",
+    "Reply with a short, conversational response only. Do not use JSON.",
+    "2-3 sentences, max 60 words. No headings, bullet points, or sign-offs.",
+    "Keep it casual and practical, weaving in Ontario RTA only when essential.",
+    landlordSoul ? "--- LANDLORD SOUL ---\n" + landlordSoul : "",
     params.triage ? "--- TRIAGE ---\n" + JSON.stringify(params.triage, null, 2) : "",
     params.tenantMessage ? "--- TENANT MESSAGE ---\n" + params.tenantMessage : "",
     conversationBlock ? "--- CONVERSATION CONTEXT ---\n" + conversationBlock : "",
@@ -496,23 +611,49 @@ export async function advisorSuggest(params: AdvisorSuggestionParams) {
     .join("\n\n");
 
   const suggestionRaw = await runGemini(prompt);
-  const parsed = suggestionRaw ? safeParseJSON(suggestionRaw) : null;
-  const analysisText = typeof parsed?.analysis === "string" ? parsed.analysis.trim() : "";
-  const replyTextCandidate =
-    typeof parsed?.reply === "string"
-      ? parsed.reply.trim()
-      : typeof parsed?.draft === "string"
-        ? parsed.draft.trim()
-        : "";
-  const fallbackAnalysis = analysisText || suggestionRaw || "Couldn't come up with a fresh angle—try rephrasing your ask.";
+  if (isLlmFallback(suggestionRaw)) {
+    return {
+      suggestion: "LLM temporarily unavailable. Try again in a few minutes.",
+      analysis: "LLM temporarily unavailable. Try again in a few minutes.",
+      reply: baseDraft,
+      rawModelText: suggestionRaw,
+      ...basePayload,
+      notes: suggestionRaw,
+    };
+  }
+  const cleanReply = (suggestionRaw || "").trim();
+  const fallbackAnalysis = cleanReply || "Couldn't come up with a fresh angle—try rephrasing your ask.";
 
   return {
     suggestion: fallbackAnalysis,
     analysis: fallbackAnalysis,
-    reply: replyTextCandidate,
+    reply: cleanReply,
     rawModelText: suggestionRaw,
     ...basePayload,
   };
+}
+
+export async function generateReminderMessage(params: ReminderMessageParams) {
+  const style = params.style || "short";
+  const type = params.type || "rent";
+  const dueLabel = params.dueLabel || "today";
+  if (!modelAvailable()) {
+    return { text: "", notes: "vertex_not_configured" };
+  }
+
+  const prompt = [
+    "You are a landlord assistant sending payment reminders to tenants.",
+    "Reply with a single short message only. No headings, bullet points, or sign-offs.",
+    "Keep it polite and practical. One or two sentences max.",
+    `Tone: ${style}.`,
+    `Topic: ${type} payment due ${dueLabel}.`,
+  ].join("\n");
+
+  const text = await runGemini(prompt);
+  if (isLlmFallback(text)) {
+    return { text: "", notes: text };
+  }
+  return { text: text.trim(), notes: "ok" };
 }
 
 export default {
@@ -521,4 +662,6 @@ export default {
   draftRtaResponse,
   refineDraft,
   advisorSuggest,
+  generateReminderMessage,
+  pingLlm,
 };

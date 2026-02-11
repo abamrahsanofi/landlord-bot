@@ -4,6 +4,7 @@ import maintenanceRouter from "./maintenance";
 import agentService from "../services/agentService";
 import repo from "../services/repository";
 import whatsappService from "../services/whatsappService";
+import { setWebhookStatus } from "../services/webhookStatus";
 
 const router = express.Router();
 
@@ -56,8 +57,8 @@ router.post("/twilio", async (req, res, next) => {
 
 const SAFE_AUTOPILOT_SEVERITIES = new Set(["low", "normal"]);
 const CRITICAL_KEYWORDS = ["fire", "water leak", "gas leak", "gas", "no power", "no heat", "flood", "smoke"];
-const MIN_REPLY_DELAY_MS = 5 * 60 * 1000; // 5 minutes
-const BACK_TO_BACK_COOLDOWN_MS = 60 * 60 * 1000; // 1 hour between replies per tenant
+const DEFAULT_REPLY_DELAY_MS = 5 * 60 * 1000; // 5 minutes
+const DEFAULT_COOLDOWN_MS = 60 * 60 * 1000; // 1 hour between replies per tenant
 const pendingTenantReplies = new Map<
   string,
   {
@@ -200,12 +201,16 @@ async function maybeRunAutopilot(record: any, triage: any, aiDraft: any, reason 
   return true;
 }
 
-function computeDelayMs(tenantId: string, severity: string, text: string) {
+async function computeDelayMs(tenantId: string, severity: string, text: string) {
   const now = Date.now();
   if (severity === "high" || severity === "critical" || containsCriticalKeyword(text)) return 0;
   const last = lastReplySentAt.get(tenantId) || 0;
-  const cooldownTarget = last + BACK_TO_BACK_COOLDOWN_MS;
-  const baseTarget = now + MIN_REPLY_DELAY_MS;
+  const cooldownSetting = await repo.getGlobalAutoReplyCooldownMinutes();
+  const cooldownMs = Math.max(0, Math.round(cooldownSetting.minutes * 60 * 1000)) || DEFAULT_COOLDOWN_MS;
+  const cooldownTarget = last + cooldownMs;
+  const delaySetting = await repo.getGlobalAutoReplyDelayMinutes();
+  const delayMs = Math.max(0, Math.round(delaySetting.minutes * 60 * 1000)) || DEFAULT_REPLY_DELAY_MS;
+  const baseTarget = now + delayMs;
   return Math.max(baseTarget, cooldownTarget) - now;
 }
 
@@ -248,6 +253,8 @@ async function flushTenantReply(params: { tenantId: string }) {
 
   const tenant = await repo.getTenantById(params.tenantId);
   if (!tenant) return null;
+  const globalAutoReply = await repo.getGlobalAutoReplyEnabled();
+  const canAutoReply = globalAutoReply.enabled && tenant.autoReplyEnabled !== false;
 
   const existing = await repo.findLatestMaintenanceForTenantId(tenant.id);
   const conversationLog = Array.isArray(existing?.chatLog) ? (existing?.chatLog as any[]) : [];
@@ -265,6 +272,12 @@ async function flushTenantReply(params: { tenantId: string }) {
     utilityCheck,
     conversationLog: [...conversationLog, { role: "tenant", content: combinedMessage, createdAt: new Date().toISOString() }],
     landlordReply: existing?.landlordReply,
+  });
+  // eslint-disable-next-line no-console
+  console.info("llm invoked (tenant batch)", {
+    tenantId: tenant.id,
+    draftAvailable: Boolean((draftResponse?.draft || "").trim()),
+    rawModelText: Boolean((triage as any)?.rawModelText || (draftResponse as any)?.notes),
   });
 
   let record = existing;
@@ -298,7 +311,7 @@ async function flushTenantReply(params: { tenantId: string }) {
   }
 
   const draftText = (draftResponse?.draft || "").trim();
-  if (draftText) {
+  if (draftText && canAutoReply) {
     await whatsappService.sendWhatsAppText({ to: bucket.replyTo, text: draftText });
     if (record?.id) {
       await repo.appendChatMessage({
@@ -308,6 +321,12 @@ async function flushTenantReply(params: { tenantId: string }) {
         meta: { channel: bucket.isGroup ? "whatsapp_group" : "whatsapp", batched: true },
       });
     }
+    lastReplySentAt.set(tenant.id, Date.now());
+    // eslint-disable-next-line no-console
+    console.info("auto-reply sent (tenant batch)", { tenantId: tenant.id });
+  } else if (draftText && !canAutoReply) {
+    // eslint-disable-next-line no-console
+    console.info("auto-reply disabled for tenant", { tenantId: tenant.id });
   }
 
   const triageJson: any = record?.triageJson || triage || {};
@@ -319,12 +338,14 @@ async function flushTenantReply(params: { tenantId: string }) {
     await whatsappService.sendWhatsAppText({ to: number, text: alert });
   }
 
-  lastReplySentAt.set(tenant.id, Date.now());
   return record;
 }
 
 router.post("/whatsapp/evolution", async (req, res) => {
   try {
+    let llmInvoked = false;
+    let autoReplySent = false;
+    let autoReplyReason: string | undefined;
     const text = extractWhatsAppText(req.body)?.trim();
     const mediaNote = extractWhatsAppMediaDescription(req.body)?.trim();
     const inboundContent = [text, mediaNote].filter(Boolean).join(" ").trim();
@@ -344,6 +365,20 @@ router.post("/whatsapp/evolution", async (req, res) => {
     }
 
     const isLandlord = !isGroup && isLandlordNumber(sender);
+    const respond = (payload: Record<string, unknown>) => {
+      setWebhookStatus({
+        receivedAt: new Date().toISOString(),
+        routed: typeof payload.routed === "string" ? payload.routed : undefined,
+        llmInvoked,
+        autoReplySent,
+        autoReplyReason,
+        delayMs: typeof (payload as any).delayMs === "number" ? (payload as any).delayMs : undefined,
+        sender,
+        isGroup,
+        isLandlord,
+      });
+      return res.json(payload);
+    };
     if (isLandlord) {
       const record = await repo.findLatestOpenMaintenance();
       if (!record) {
@@ -351,7 +386,7 @@ router.post("/whatsapp/evolution", async (req, res) => {
           to: sender,
           text: "No active tenant requests right now.",
         });
-        return res.json({ ok: true, routed: "landlord_no_active" });
+        return respond({ ok: true, routed: "landlord_no_active", llmInvoked, autoReplySent });
       }
       await repo.appendChatMessage({
         id: record.id,
@@ -383,6 +418,7 @@ router.post("/whatsapp/evolution", async (req, res) => {
             conversationLog: augmentedLog,
             landlordReply: text,
           });
+          llmInvoked = true;
           const analysis = (() => {
             if (typeof (landlordAssist as any)?.analysis === "string") return (landlordAssist as any).analysis.trim();
             if (typeof (landlordAssist as any)?.suggestion === "string") return (landlordAssist as any).suggestion.trim();
@@ -420,6 +456,7 @@ router.post("/whatsapp/evolution", async (req, res) => {
             conversationLog: augmentedLog,
             landlordReply: text,
           });
+          llmInvoked = true;
           const chatReplyRaw = (() => {
             if (typeof (landlordChat as any)?.reply === "string") return (landlordChat as any).reply.trim();
             if (typeof (landlordChat as any)?.analysis === "string") return (landlordChat as any).analysis.trim();
@@ -463,7 +500,7 @@ router.post("/whatsapp/evolution", async (req, res) => {
             });
           }
         }
-      return res.json({ ok: true, routed: "landlord" });
+      return respond({ ok: true, routed: "landlord", llmInvoked, autoReplySent, autoReplyReason });
     }
 
     const tenant = await repo.findTenantByPhone(sender);
@@ -476,33 +513,50 @@ router.post("/whatsapp/evolution", async (req, res) => {
         }
         // eslint-disable-next-line no-console
         console.info("whatsapp routed contractor message", { sender, remoteJid, participant, isGroup });
-        return res.json({ ok: true, routed: "contractor" });
+        return respond({ ok: true, routed: "contractor", llmInvoked, autoReplySent, autoReplyReason });
       }
       // Ignore messages from numbers that are not registered tenants.
       // eslint-disable-next-line no-console
       console.warn("whatsapp ignored unknown sender", { sender, remoteJid, participant, isGroup });
-      return res.json({ ok: true, ignored: "unknown_sender" });
+      return respond({ ok: true, ignored: "unknown_sender", llmInvoked, autoReplySent, autoReplyReason });
     }
 
-    const existing = await repo.findLatestMaintenanceForTenantId(tenant.id);
+    let record = await repo.findLatestMaintenanceForTenantId(tenant.id);
     const tenantMessage = inboundContent;
     const triage = await agentService.triageMaintenance({
       tenantMessage,
       tenantId: tenant.id,
       unitId: undefined,
     });
+    llmInvoked = true;
 
-    const delayMs = computeDelayMs(tenant.id, (triage?.classification?.severity || "normal").toString().toLowerCase(), tenantMessage);
+    const delayMs = await computeDelayMs(
+      tenant.id,
+      (triage?.classification?.severity || "normal").toString().toLowerCase(),
+      tenantMessage
+    );
     const isImmediate = delayMs <= 0;
 
     // Always log the inbound tenant message to the conversation.
-    if (existing?.id) {
-      await repo.appendChatMessage({
-        id: existing.id,
+    if (record?.id) {
+      record = await repo.appendChatMessage({
+        id: record.id,
         role: "tenant",
         content: tenantMessage,
         meta: { channel: isGroup ? "whatsapp_group" : "whatsapp", sender, media: Boolean(mediaNote) },
       });
+    } else {
+      record = await repo.createMaintenanceRequest({
+        tenantId: tenant.id,
+        unitId: undefined,
+        message: tenantMessage,
+        triage,
+        autopilotEnabled: true,
+      });
+    }
+
+    if (record?.id) {
+      await repo.updateMaintenanceAnalysis({ id: record.id, triage });
     }
 
     if (!isImmediate) {
@@ -514,57 +568,44 @@ router.post("/whatsapp/evolution", async (req, res) => {
         media: Boolean(mediaNote),
         delayMs,
       });
-      return res.json({ ok: true, routed: "tenant_queued", delayMs });
+      autoReplyReason = "queued_delay";
+      return respond({ ok: true, routed: "tenant_queued", delayMs, llmInvoked, autoReplySent, autoReplyReason });
     }
 
-    const conversationLog = Array.isArray(existing?.chatLog) ? (existing?.chatLog as any[]) : [];
+    const conversationLog = Array.isArray(record?.chatLog) ? (record?.chatLog as any[]) : [];
     const utilityCheck = await agentService.checkUtilityAnomaly({ tenantId: tenant.id, unitId: undefined });
 
     const draftResponse = await agentService.draftRtaResponse({
       tenantMessage,
       triage,
       utilityCheck,
-      conversationLog: [...conversationLog, { role: "tenant", content: tenantMessage, createdAt: new Date().toISOString() }],
-      landlordReply: existing?.landlordReply,
+      conversationLog,
+      landlordReply: record?.landlordReply,
     });
+    llmInvoked = true;
 
-    let record = existing;
     if (record?.id) {
-      await repo.appendChatMessage({
-        id: record.id,
-        role: "tenant",
-        content: tenantMessage,
-        meta: { channel: isGroup ? "whatsapp_group" : "whatsapp", sender, media: Boolean(mediaNote) },
-      });
       await repo.updateMaintenanceAnalysis({ id: record.id, triage, aiDraft: draftResponse });
       await repo.updateMaintenanceUtility({ maintenanceId: record.id, utilityCheck });
-    } else {
-      record = await repo.createMaintenanceRequest({
-        tenantId: tenant.id,
-        unitId: undefined,
-        message: tenantMessage,
-        triage,
-        aiDraft: draftResponse,
-        autopilotEnabled: true,
-      });
-      if (record?.id) {
-        await repo.updateMaintenanceUtility({ maintenanceId: record.id, utilityCheck });
-        await repo.appendChatMessage({
-          id: record.id,
-          role: "tenant",
-          content: tenantMessage,
-          meta: { channel: isGroup ? "whatsapp_group" : "whatsapp", sender, media: Boolean(mediaNote) },
-        });
-      }
     }
 
+    const globalAutoReply = await repo.getGlobalAutoReplyEnabled();
+    const canAutoReply = globalAutoReply.enabled && tenant.autoReplyEnabled !== false;
     const draftText = (draftResponse?.draft || "").trim();
-    if (draftText) {
+    if (draftText && canAutoReply) {
       await whatsappService.sendWhatsAppText({
         to: replyTo,
         text: draftText,
       });
       lastReplySentAt.set(tenant.id, Date.now());
+      autoReplySent = true;
+      autoReplyReason = "draft_sent";
+    } else if (draftText && !canAutoReply) {
+      // eslint-disable-next-line no-console
+      console.info("auto-reply disabled for tenant", { tenantId: tenant.id });
+      autoReplyReason = "auto_reply_disabled";
+    } else if (!draftText) {
+      autoReplyReason = "no_draft";
     }
 
     const triageJson: any = record?.triageJson || triage || {};
@@ -576,7 +617,7 @@ router.post("/whatsapp/evolution", async (req, res) => {
       await whatsappService.sendWhatsAppText({ to: number, text: alert });
     }
 
-    return res.json({ ok: true, routed: "tenant" });
+    return respond({ ok: true, routed: "tenant", llmInvoked, autoReplySent, autoReplyReason });
   } catch (err) {
     // eslint-disable-next-line no-console
     console.error("whatsapp webhook failed", err);

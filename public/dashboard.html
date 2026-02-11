@@ -119,6 +119,8 @@
     .chip { padding: 4px 8px; border-radius: 8px; background: var(--bg); color: var(--muted); font-size: 12px; border: 1px solid var(--border); }
     .assistant-panel { background: var(--card); border: 1px solid var(--border); border-radius: 16px; box-shadow: var(--shadow); padding: 14px; display: flex; flex-direction: column; gap: 10px; }
     .assistant-log { max-height: 200px; overflow: auto; border: 1px dashed var(--border); border-radius: 12px; padding: 10px; background: var(--bg); }
+    .thread-summary { font-weight: 600; margin-bottom: 6px; }
+    .thread-box { max-height: 160px; overflow: auto; border: 1px dashed var(--border); border-radius: 10px; padding: 8px; background: var(--bg); }
     .toast { position: fixed; right: 16px; bottom: 16px; background: #1f2a44; color: #fff; padding: 12px 14px; border-radius: 12px; box-shadow: var(--shadow); opacity: 0; transform: translateY(10px); transition: 0.2s ease; }
     .toast.show { opacity: 1; transform: translateY(0); }
     .chart-wrap { background: var(--card); border: 1px solid var(--border); border-radius: 16px; box-shadow: var(--shadow); padding: 12px; }
@@ -170,6 +172,23 @@
           <span class="chip" id="connUtility">Utility: unknown</span>
           <span class="chip" id="connJeffy">Jeffy: unknown</span>
         </div>
+        <div class="flex" style="gap:12px;align-items:center;flex-wrap:wrap;">
+          <span class="muted">Global autopilot (tenant auto-replies)</span>
+          <button class="btn btn-ghost" id="globalAutoReplyToggleMission">Loading...</button>
+          <span class="muted" id="globalAutoReplyStatusMission"></span>
+        </div>
+        <div class="flex" style="gap:12px;align-items:center;flex-wrap:wrap;">
+          <span class="muted">Response delay (minutes)</span>
+          <input id="autoReplyDelayMinutes" type="number" min="0" max="120" step="1" style="width:90px;" />
+          <button class="btn btn-ghost" id="saveAutoReplyDelay">Update</button>
+          <span class="muted" id="autoReplyDelayStatus"></span>
+        </div>
+        <div class="flex" style="gap:12px;align-items:center;flex-wrap:wrap;">
+          <span class="muted">Cooldown (minutes)</span>
+          <input id="autoReplyCooldownMinutes" type="number" min="0" max="240" step="1" style="width:90px;" />
+          <button class="btn btn-ghost" id="saveAutoReplyCooldown">Update</button>
+          <span class="muted" id="autoReplyCooldownStatus"></span>
+        </div>
         <div class="cards">
           <div class="card"><h4>Total Issues</h4><div class="big" id="cardIssues">--</div><span class="pill warn" id="cardIssuesBreakdown">--</span></div>
           <div class="card"><h4>Active/Pending</h4><div class="big" id="cardPending">--</div><span class="pill" id="cardPendingBreakdown">--</span></div>
@@ -201,7 +220,7 @@
           </div>
         </div>
         <h4>All Issues</h4>
-        <table class="table" id="maintTable"><thead><tr><th>Unit</th><th>Tenant</th><th>Status</th><th>Severity</th><th>Message</th><th>Updated</th><th>Actions</th></tr></thead><tbody><tr><td colspan="7" class="muted">Loading...</td></tr></tbody></table>
+        <table class="table" id="maintTable"><thead><tr><th>Unit</th><th>Tenant</th><th>Status</th><th>Severity</th><th>Tenant Summary</th><th>Updated</th><th>Actions</th></tr></thead><tbody><tr><td colspan="7" class="muted">Loading...</td></tr></tbody></table>
       </section>
 
       <section id="utilities" class="section">
@@ -254,7 +273,12 @@
           <select id="tenantUnit"></select>
           <button class="btn btn-primary" id="createTenantBtn">Add Tenant</button>
         </div>
-        <table class="table" id="tenantTable"><thead><tr><th>Name</th><th>Phone</th><th>Email</th><th>Unit</th><th>Actions</th></tr></thead><tbody><tr><td colspan="5" class="muted">Loading...</td></tr></tbody></table>
+        <div class="flex" style="gap:12px;align-items:center;margin:10px 0;flex-wrap:wrap;">
+          <span class="muted">Global tenant auto-reply</span>
+          <button class="btn btn-ghost" id="globalAutoReplyToggle">Loading...</button>
+          <span class="muted" id="globalAutoReplyStatus"></span>
+        </div>
+        <table class="table" id="tenantTable"><thead><tr><th>Name</th><th>Phone</th><th>Email</th><th>Unit</th><th>Auto-Reply</th><th>Actions</th></tr></thead><tbody><tr><td colspan="6" class="muted">Loading...</td></tr></tbody></table>
       </section>
 
       <section id="contractors" class="section">
@@ -285,6 +309,14 @@
             <input id="testWhatsappTo" placeholder="Destination number" />
             <input id="testWhatsappMsg" placeholder="Test message" value="Hello from Landlord MC" />
             <div class="muted" id="whatsappStatus"></div>
+          </div>
+        </div>
+        <div class="grid-2" style="margin-top:10px;">
+          <div>
+            <h4>Last Webhook</h4>
+            <div class="muted" id="webhookStatusSummary">No webhook received yet.</div>
+            <div class="muted" id="webhookStatusDetail"></div>
+            <button class="btn btn-ghost" id="refreshWebhookStatus">Refresh</button>
           </div>
         </div>
       </section>
@@ -355,7 +387,7 @@
     }
 
     const ACTIVE_STATUSES = ['OPEN','PENDING','IN_TRIAGE','SCHEDULED','IN_PROGRESS'];
-    const state = { units: [], tenants: [], contractors: [], maintenance: [], utilityBills: [], utilityCreds: [], reminders: [], dbEnabled: true, health: { llm: "unknown", whatsapp: "unknown", utility: "unknown", jeffy: "unknown" } };
+    const state = { units: [], tenants: [], contractors: [], maintenance: [], utilityBills: [], utilityCreds: [], reminders: [], dbEnabled: true, autoReplyGlobalEnabled: true, autoReplyDelayMinutes: 5, autoReplyCooldownMinutes: 60, webhookStatus: null, health: { llm: "unknown", whatsapp: "unknown", utility: "unknown", jeffy: "unknown" } };
 
     function severityOf(record) {
       return (record?.triageJson?.classification?.severity || record?.triage?.classification?.severity || 'unknown').toString().toLowerCase();
@@ -363,6 +395,37 @@
 
     function formatStatus(status) {
       return (status || '').replace(/_/g,' ');
+    }
+
+    function resolveTenant(record) {
+      return record?.tenant || state.tenants.find((t) => t.id === record?.tenantId) || {};
+    }
+
+    function resolveUnit(record) {
+      return record?.unit || state.units.find((u) => u.id === record?.unitId) || {};
+    }
+
+    function renderThread(record) {
+      const log = Array.isArray(record?.chatLog) ? record.chatLog : [];
+      if (!log.length) return record?.message || '';
+      return log
+        .filter((entry) => entry?.content)
+        .map((entry) => {
+          const role = (entry.role || 'unknown').toUpperCase();
+          return `<div><strong>${role}:</strong> ${entry.content}</div>`;
+        })
+        .join('');
+    }
+
+    function summarizeActions(record) {
+      const triage = record?.triageJson || record?.triage || {};
+      const summary = triage?.summary ? String(triage.summary) : '';
+      const actions = Array.isArray(triage?.recommendedActions) ? triage.recommendedActions : [];
+      const requests = Array.isArray(triage?.dataRequests) ? triage.dataRequests : [];
+      const parts = [summary, ...actions, ...requests].filter(Boolean);
+      const text = parts.join(' · ');
+      if (!text) return 'Review and follow up.';
+      return text.length > 160 ? `${text.slice(0, 157)}...` : text;
     }
 
     async function loadUnits() {
@@ -376,6 +439,36 @@
       const { items } = await fetchJson('/admin/tenants');
       state.tenants = items || [];
       renderTenants();
+    }
+
+    async function loadAutoReplySettings() {
+      try {
+        const res = await fetchJson('/admin/auto-reply');
+        state.autoReplyGlobalEnabled = res.enabled !== false;
+      } catch (err) {
+        state.autoReplyGlobalEnabled = true;
+      }
+      renderGlobalAutoReply();
+    }
+
+    async function loadAutoReplyDelay() {
+      try {
+        const res = await fetchJson('/admin/auto-reply-delay');
+        state.autoReplyDelayMinutes = Number(res.minutes) || 0;
+      } catch (err) {
+        state.autoReplyDelayMinutes = 5;
+      }
+      renderAutoReplyDelay();
+    }
+
+    async function loadAutoReplyCooldown() {
+      try {
+        const res = await fetchJson('/admin/auto-reply-cooldown');
+        state.autoReplyCooldownMinutes = Number(res.minutes) || 0;
+      } catch (err) {
+        state.autoReplyCooldownMinutes = 60;
+      }
+      renderAutoReplyCooldown();
     }
 
     async function loadContractors() {
@@ -420,6 +513,16 @@
       }
     }
 
+    async function loadWebhookStatus() {
+      try {
+        const res = await fetchJson('/admin/webhook-status');
+        state.webhookStatus = res?.status || null;
+        renderWebhookStatus();
+      } catch (err) {
+        // keep previous state
+      }
+    }
+
     async function loadReminders() {
       const { items } = await fetchJson('/admin/reminders');
       state.reminders = items || [];
@@ -434,12 +537,43 @@
 
     function renderTenants() {
       const tbody = document.querySelector('#tenantTable tbody');
-      if (!state.tenants.length) { tbody.innerHTML = '<tr><td colspan="5" class="muted">No tenants</td></tr>'; return; }
+      if (!state.tenants.length) { tbody.innerHTML = '<tr><td colspan="6" class="muted">No tenants</td></tr>'; return; }
       tbody.innerHTML = state.tenants.map((t) => {
         const unitId = t.unitId || (t.units && t.units[0]?.unitId);
         const unit = state.units.find((u) => u.id === unitId) || {};
-        return `<tr><td>${t.name}</td><td>${t.phone || '-'}</td><td>${t.email || '-'}</td><td>${unit.label || '-'}</td><td><button class="btn btn-ghost tenant-edit" data-id="${t.id}">Edit</button><button class="btn btn-ghost tenant-delete" data-id="${t.id}">Delete</button></td></tr>`;
+        const autoReplyEnabled = t.autoReplyEnabled !== false;
+        return `<tr><td>${t.name}</td><td>${t.phone || '-'}</td><td>${t.email || '-'}</td><td>${unit.label || '-'}</td><td><button class="btn btn-ghost tenant-autoreply" data-id="${t.id}" data-enabled="${autoReplyEnabled}">${autoReplyEnabled ? 'On' : 'Off'}</button></td><td><button class="btn btn-ghost tenant-edit" data-id="${t.id}">Edit</button><button class="btn btn-ghost tenant-delete" data-id="${t.id}">Delete</button></td></tr>`;
       }).join('');
+    }
+
+    function renderGlobalAutoReply() {
+      const btn = document.getElementById('globalAutoReplyToggle');
+      const status = document.getElementById('globalAutoReplyStatus');
+      const btnMission = document.getElementById('globalAutoReplyToggleMission');
+      const statusMission = document.getElementById('globalAutoReplyStatusMission');
+      if (!btn || !status) return;
+      btn.textContent = state.autoReplyGlobalEnabled ? 'Global Auto-Reply: On' : 'Global Auto-Reply: Off';
+      status.textContent = state.autoReplyGlobalEnabled ? 'Tenant replies enabled' : 'Tenant replies paused';
+      if (btnMission && statusMission) {
+        btnMission.textContent = state.autoReplyGlobalEnabled ? 'Autopilot: On' : 'Autopilot: Off';
+        statusMission.textContent = state.autoReplyGlobalEnabled ? 'Auto-replies enabled' : 'Auto-replies paused';
+      }
+    }
+
+    function renderAutoReplyDelay() {
+      const input = document.getElementById('autoReplyDelayMinutes');
+      const status = document.getElementById('autoReplyDelayStatus');
+      if (!input || !status) return;
+      input.value = state.autoReplyDelayMinutes;
+      status.textContent = `Current: ${state.autoReplyDelayMinutes} min`;
+    }
+
+    function renderAutoReplyCooldown() {
+      const input = document.getElementById('autoReplyCooldownMinutes');
+      const status = document.getElementById('autoReplyCooldownStatus');
+      if (!input || !status) return;
+      input.value = state.autoReplyCooldownMinutes;
+      status.textContent = `Current: ${state.autoReplyCooldownMinutes} min`;
     }
 
     function renderContractors() {
@@ -459,7 +593,7 @@
       if (!state.maintenance.length) { tbody.innerHTML = '<tr><td colspan="5" class="muted">No maintenance records</td></tr>'; return; }
       const counts = {};
       state.maintenance.forEach((m)=>{
-        const key = m.unitId || 'Unassigned';
+        const key = m.unitId || m.unit?.id || 'Unassigned';
         if(!counts[key]) counts[key] = { pending:0, triage:0, scheduled:0, open:0 };
         if(m.status==='PENDING') counts[key].pending++;
         else if(m.status==='IN_TRIAGE') counts[key].triage++;
@@ -467,7 +601,7 @@
         else if(m.status==='OPEN') counts[key].open++;
       });
       tbody.innerHTML = Object.entries(counts).map(([unitId, data])=>{
-        const unit = state.units.find((u)=>u.id===unitId) || {};
+        const unit = state.units.find((u)=>u.id===unitId) || state.maintenance.find((m)=>m.unit?.id===unitId)?.unit || {};
         return `<tr><td>${unit.label || unitId}</td><td>${data.pending}</td><td>${data.triage}</td><td>${data.scheduled}</td><td>${data.open}</td></tr>`;
       }).join('');
     }
@@ -476,8 +610,8 @@
       const tbody = document.querySelector('#autopilotTable tbody');
       if (!state.maintenance.length) { tbody.innerHTML = '<tr><td colspan="4" class="muted">No maintenance records</td></tr>'; return; }
       tbody.innerHTML = state.maintenance.map((m)=>{
-        const tenant = state.tenants.find((t)=>t.id===m.tenantId) || {};
-        const unit = state.units.find((u)=>u.id===m.unitId) || {};
+        const tenant = resolveTenant(m);
+        const unit = resolveUnit(m);
         const severity = severityOf(m);
         const enabled = !!m.autopilotEnabled;
         const status = m.autopilotStatus || (enabled ? 'idle' : 'off');
@@ -489,16 +623,21 @@
       const tbody = document.querySelector('#maintTable tbody');
       if (!state.maintenance.length) { tbody.innerHTML = '<tr><td colspan="7" class="muted">No maintenance records</td></tr>'; return; }
       tbody.innerHTML = state.maintenance.map((m) => {
-        const tenant = state.tenants.find((t) => t.id === m.tenantId) || {};
-        const unit = state.units.find((u) => u.id === m.unitId) || {};
+        const tenant = resolveTenant(m);
+        const unit = resolveUnit(m);
         const severity = severityOf(m);
         const draft = (m.aiDraft && m.aiDraft.draft) || '';
+        const thread = renderThread(m);
+        const summary = summarizeActions(m);
         return `<tr>
           <td>${unit.label || '-'}</td>
           <td>${tenant.name || '-'}</td>
           <td>${formatStatus(m.status)}</td>
           <td>${severity}</td>
-          <td>${(m.message || '').slice(0,80)}</td>
+          <td>
+            <div class="thread-summary">${summary}</div>
+            <div class="thread-box">${thread}</div>
+          </td>
           <td>${new Date(m.updatedAt || m.createdAt).toLocaleString()}</td>
           <td>
             <div class="flex" style="gap:6px;flex-wrap:wrap;">
@@ -576,6 +715,34 @@
       apply('connJeffy', state.health.jeffy || 'unknown');
     }
 
+    function renderWebhookStatus() {
+      const summary = document.getElementById('webhookStatusSummary');
+      const detail = document.getElementById('webhookStatusDetail');
+      if (!summary || !detail) return;
+      if (!state.webhookStatus) {
+        summary.textContent = 'No webhook received yet.';
+        detail.textContent = '';
+        return;
+      }
+      const data = state.webhookStatus;
+      const receivedAt = data.receivedAt ? new Date(data.receivedAt).toLocaleString() : 'unknown time';
+      summary.textContent = `Last webhook: ${receivedAt} · Routed: ${data.routed || 'n/a'}`;
+      const llm = data.llmInvoked ? 'yes' : 'no';
+      const sent = data.autoReplySent ? 'yes' : 'no';
+      const reason = data.autoReplyReason || 'n/a';
+      const sender = data.sender || 'unknown';
+      detail.textContent = `Sender ${sender} · LLM ${llm} · Auto-reply ${sent} (${reason})`;
+    }
+
+    function pickLatestMaintenance() {
+      if (!state.maintenance.length) return null;
+      return [...state.maintenance].sort((a, b) => {
+        const aTime = new Date(a.updatedAt || a.createdAt || 0).getTime();
+        const bTime = new Date(b.updatedAt || b.createdAt || 0).getTime();
+        return bTime - aTime;
+      })[0];
+    }
+
     let chartStatus, chartUtility, chartUnitIssues;
     function renderCharts() {
       const statusLabels = ['OPEN','PENDING','IN_TRIAGE','SCHEDULED','IN_PROGRESS','RESOLVED','CANCELLED'];
@@ -602,7 +769,8 @@
       const notifications = document.getElementById('notifications');
       notifications.innerHTML = state.maintenance.slice(0,5).map((m)=>{
         const tenant = state.tenants.find((t)=>t.id===m.tenantId) || {}; const unit = state.units.find((u)=>u.id===m.unitId) || {}; 
-        return `<li><strong>${tenant.name || 'Unknown'} · ${unit.label || 'No unit'}</strong><div class="muted">${m.status} · ${new Date(m.updatedAt||m.createdAt).toLocaleString()}</div></li>`;
+        const actionSummary = summarizeActions(m);
+        return `<li><strong>${tenant.name || 'Unknown'} · ${unit.label || 'No unit'}</strong><div class="muted">${m.status} · ${new Date(m.updatedAt||m.createdAt).toLocaleString()}</div><div class="muted">${actionSummary}</div></li>`;
       }).join('');
     }
 
@@ -627,10 +795,14 @@
       const email = (document.getElementById('tenantEmail').value || '').trim();
       const unitId = (document.getElementById('tenantUnit').value || '').trim();
       if(!name) return toast('Tenant name required');
-      await fetchJson('/admin/tenants', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ name, phone, email, unitId: unitId || undefined })});
-      toast('Tenant created');
-      ['tenantName','tenantPhone','tenantEmail'].forEach((id)=>document.getElementById(id).value='');
-      loadTenants();
+      try {
+        await fetchJson('/admin/tenants', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ name, phone, email, unitId: unitId || undefined })});
+        toast('Tenant created');
+        ['tenantName','tenantPhone','tenantEmail'].forEach((id)=>document.getElementById(id).value='');
+        loadTenants();
+      } catch (err) {
+        toast(`Tenant create failed: ${err.message}`);
+      }
     });
 
     document.getElementById('createContractorBtn').addEventListener('click', async ()=>{
@@ -697,10 +869,57 @@
     document.getElementById('addUnitShortcut').addEventListener('click', ()=> showView('units'));
     document.getElementById('refreshUnits').addEventListener('click', loadUnits);
     document.getElementById('refreshTenants').addEventListener('click', loadTenants);
+    document.getElementById('globalAutoReplyToggleMission').addEventListener('click', async ()=>{
+      const next = !state.autoReplyGlobalEnabled;
+      try {
+        await fetchJson('/admin/auto-reply', { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ enabled: next })});
+        state.autoReplyGlobalEnabled = next;
+        renderGlobalAutoReply();
+        toast(`Global autopilot ${next ? 'enabled' : 'disabled'}`);
+      } catch (err) {
+        toast(`Global autopilot update failed: ${err.message}`);
+      }
+    });
+    document.getElementById('globalAutoReplyToggle').addEventListener('click', async ()=>{
+      const next = !state.autoReplyGlobalEnabled;
+      try {
+        await fetchJson('/admin/auto-reply', { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ enabled: next })});
+        state.autoReplyGlobalEnabled = next;
+        renderGlobalAutoReply();
+        toast(`Global auto-reply ${next ? 'enabled' : 'disabled'}`);
+      } catch (err) {
+        toast(`Global auto-reply update failed: ${err.message}`);
+      }
+    });
+    document.getElementById('saveAutoReplyDelay').addEventListener('click', async ()=>{
+      const raw = Number(document.getElementById('autoReplyDelayMinutes').value);
+      if (Number.isNaN(raw) || raw < 0 || raw > 120) return toast('Delay must be 0-120 minutes');
+      try {
+        await fetchJson('/admin/auto-reply-delay', { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ minutes: raw })});
+        state.autoReplyDelayMinutes = raw;
+        renderAutoReplyDelay();
+        toast('Response delay updated');
+      } catch (err) {
+        toast(`Delay update failed: ${err.message}`);
+      }
+    });
+    document.getElementById('saveAutoReplyCooldown').addEventListener('click', async ()=>{
+      const raw = Number(document.getElementById('autoReplyCooldownMinutes').value);
+      if (Number.isNaN(raw) || raw < 0 || raw > 240) return toast('Cooldown must be 0-240 minutes');
+      try {
+        await fetchJson('/admin/auto-reply-cooldown', { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ minutes: raw })});
+        state.autoReplyCooldownMinutes = raw;
+        renderAutoReplyCooldown();
+        toast('Cooldown updated');
+      } catch (err) {
+        toast(`Cooldown update failed: ${err.message}`);
+      }
+    });
     document.getElementById('refreshContractors').addEventListener('click', loadContractors);
     document.getElementById('refreshUtilities').addEventListener('click', ()=>{ loadUtilities(); loadUtilCreds(); });
     document.getElementById('refreshMaint').addEventListener('click', ()=> loadMaintenance({ status: document.getElementById('maintStatusFilter').value || undefined }));
     document.getElementById('maintStatusFilter').addEventListener('change', (e)=> loadMaintenance({ status: e.target.value || undefined }));
+    document.getElementById('refreshWebhookStatus').addEventListener('click', loadWebhookStatus);
 
     document.getElementById('saveReminder').addEventListener('click', async ()=>{
       const type = document.getElementById('reminderType').value;
@@ -720,10 +939,36 @@
       const log = document.getElementById('assistantLog');
       const now = new Date().toLocaleTimeString();
       const entry = document.createElement('div');
-      entry.innerHTML = `<strong>You</strong> <span class="muted">${now}</span><div>${val}</div><div class="muted">(Connect to advisor endpoint for live responses)</div>`;
+      entry.innerHTML = `<strong>You</strong> <span class="muted">${now}</span><div>${val}</div>`;
       if (log.firstChild && log.firstChild.classList?.contains('muted')) log.innerHTML = '';
       log.prepend(entry);
       document.getElementById('assistantInput').value = '';
+
+      const latest = pickLatestMaintenance();
+      if (!latest?.id) {
+        const warn = document.createElement('div');
+        warn.innerHTML = `<strong>Assistant</strong> <span class="muted">${now}</span><div>No maintenance record found. Create or select one first.</div>`;
+        log.prepend(warn);
+        return;
+      }
+
+      const style = document.getElementById('assistantStyle').value || 'short';
+      fetchJson(`/maintenance/${latest.id}/advisor`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ instructions: `${val}\n\nStyle: ${style}` }),
+      })
+        .then((res) => {
+          const suggestion = res?.suggestion?.reply || res?.suggestion?.suggestion || 'No response.';
+          const aiEntry = document.createElement('div');
+          aiEntry.innerHTML = `<strong>Assistant</strong> <span class="muted">${new Date().toLocaleTimeString()}</span><div>${suggestion}</div>`;
+          log.prepend(aiEntry);
+        })
+        .catch((err) => {
+          const aiEntry = document.createElement('div');
+          aiEntry.innerHTML = `<strong>Assistant</strong> <span class="muted">${new Date().toLocaleTimeString()}</span><div>Request failed: ${err.message}</div>`;
+          log.prepend(aiEntry);
+        });
     });
 
     document.body.addEventListener('click', async (e)=>{
@@ -755,6 +1000,13 @@
         const email = prompt('Email', tenant.email || '');
         await fetchJson(`/admin/tenants/${id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ name, phone, email })});
         toast('Tenant updated');
+        loadTenants();
+      }
+      if (target.classList.contains('tenant-autoreply')) {
+        const id = target.dataset.id; if(!id) return;
+        const enabled = target.dataset.enabled === 'true';
+        await fetchJson(`/admin/tenants/${id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ autoReplyEnabled: !enabled })});
+        toast(`Tenant auto-reply ${!enabled ? 'enabled' : 'disabled'}`);
         loadTenants();
       }
       if (target.classList.contains('tenant-delete')) {
@@ -867,11 +1119,15 @@
         fillUnitSelects();
       });
       loadTenants();
+      loadAutoReplySettings();
+      loadAutoReplyDelay();
+      loadAutoReplyCooldown();
       loadContractors();
       loadMaintenance();
       loadUtilities();
       loadUtilCreds();
       loadHealth();
+      loadWebhookStatus();
       loadReminders();
     }
 

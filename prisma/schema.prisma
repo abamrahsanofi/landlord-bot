@@ -35,11 +35,20 @@ model Tenant {
 	name        String
 	phone       String?              @unique
 	email       String?              @unique
+	autoReplyEnabled Boolean          @default(true)
 	units       UnitTenant[]
 	requests    MaintenanceRequest[]
 	utilityBills UtilityBill[]
 	createdAt   DateTime             @default(now())
 	updatedAt   DateTime             @updatedAt
+}
+
+model AppSetting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Unit {

@@ -182,7 +182,7 @@ export async function listMaintenance(params: {
   unitId?: string;
   tenantId?: string;
 }) {
-  if (!isDbEnabled) return [];
+  if (!isDbEnabled) return { items: [], dbEnabled: false };
   const limit = params.limit && params.limit > 0 ? params.limit : 100;
   const statusList = Array.isArray(params.status)
     ? params.status
@@ -194,15 +194,20 @@ export async function listMaintenance(params: {
   if (params.unitId) where.unitId = params.unitId;
   if (params.tenantId) where.tenantId = params.tenantId;
   try {
-    return await db.maintenanceRequest.findMany({
+    const items = await db.maintenanceRequest.findMany({
       where,
       orderBy: { createdAt: "desc" },
       take: limit,
+      include: {
+        tenant: true,
+        unit: true,
+      },
     });
+    return { items, dbEnabled: true };
   } catch (err) {
     // eslint-disable-next-line no-console
     console.warn("list maintenance failed", err);
-    return [];
+    return { items: [], dbEnabled: isDbEnabled };
   }
 }
 
@@ -407,7 +412,14 @@ export async function logAutopilotEvent(params: {
   }
 }
 
-export async function createTenant(params: { id?: string; name: string; phone?: string; email?: string; unitId?: string }) {
+export async function createTenant(params: {
+  id?: string;
+  name: string;
+  phone?: string;
+  email?: string;
+  unitId?: string;
+  autoReplyEnabled?: boolean;
+}) {
   if (!isDbEnabled) return null;
   try {
     const record = await db.tenant.create({
@@ -416,6 +428,7 @@ export async function createTenant(params: { id?: string; name: string; phone?: 
         name: params.name,
         phone: params.phone,
         email: params.email,
+        autoReplyEnabled: typeof params.autoReplyEnabled === "boolean" ? params.autoReplyEnabled : undefined,
       },
     });
     if (params.unitId) {
@@ -472,12 +485,22 @@ export async function listTenants() {
   }
 }
 
-export async function updateTenant(params: { id: string; name?: string; phone?: string; email?: string; unitId?: string | null }) {
+export async function updateTenant(params: {
+  id: string;
+  name?: string;
+  phone?: string;
+  email?: string;
+  unitId?: string | null;
+  autoReplyEnabled?: boolean;
+}) {
   if (!isDbEnabled || !params.id) return null;
   const data: Record<string, unknown> = {};
   if (typeof params.name === "string") data.name = params.name;
   if (typeof params.phone === "string") data.phone = params.phone;
   if (typeof params.email === "string") data.email = params.email;
+  if (typeof (params as { autoReplyEnabled?: boolean }).autoReplyEnabled === "boolean") {
+    data.autoReplyEnabled = (params as { autoReplyEnabled: boolean }).autoReplyEnabled;
+  }
   try {
     const updated = await db.tenant.update({ where: { id: params.id }, data });
     if (params.unitId !== undefined) {
@@ -490,6 +513,94 @@ export async function updateTenant(params: { id: string; name?: string; phone?: 
   } catch (err) {
     // eslint-disable-next-line no-console
     console.warn("tenant update skipped", err);
+    return null;
+  }
+}
+
+export async function getGlobalAutoReplyEnabled() {
+  if (!isDbEnabled) return { enabled: true, source: "default" as const };
+  try {
+    const record = await db.appSetting.findUnique({ where: { key: "global_auto_reply_enabled" } });
+    if (!record) return { enabled: true, source: "default" as const };
+    return { enabled: record.value !== "false", source: "db" as const };
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn("get global auto-reply failed", err);
+    return { enabled: true, source: "default" as const };
+  }
+}
+
+export async function setGlobalAutoReplyEnabled(params: { enabled: boolean }) {
+  if (!isDbEnabled) return null;
+  try {
+    return await db.appSetting.upsert({
+      where: { key: "global_auto_reply_enabled" },
+      create: { key: "global_auto_reply_enabled", value: params.enabled ? "true" : "false" },
+      update: { value: params.enabled ? "true" : "false" },
+    });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn("set global auto-reply failed", err);
+    return null;
+  }
+}
+
+export async function getGlobalAutoReplyDelayMinutes() {
+  if (!isDbEnabled) return { minutes: 5, source: "default" as const };
+  try {
+    const record = await db.appSetting.findUnique({ where: { key: "global_auto_reply_delay_minutes" } });
+    if (!record) return { minutes: 5, source: "default" as const };
+    const parsed = Number(record.value);
+    if (Number.isNaN(parsed) || parsed < 0) return { minutes: 5, source: "default" as const };
+    return { minutes: parsed, source: "db" as const };
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn("get global auto-reply delay failed", err);
+    return { minutes: 5, source: "default" as const };
+  }
+}
+
+export async function setGlobalAutoReplyDelayMinutes(params: { minutes: number }) {
+  if (!isDbEnabled) return null;
+  try {
+    return await db.appSetting.upsert({
+      where: { key: "global_auto_reply_delay_minutes" },
+      create: { key: "global_auto_reply_delay_minutes", value: String(params.minutes) },
+      update: { value: String(params.minutes) },
+    });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn("set global auto-reply delay failed", err);
+    return null;
+  }
+}
+
+export async function getGlobalAutoReplyCooldownMinutes() {
+  if (!isDbEnabled) return { minutes: 60, source: "default" as const };
+  try {
+    const record = await db.appSetting.findUnique({ where: { key: "global_auto_reply_cooldown_minutes" } });
+    if (!record) return { minutes: 60, source: "default" as const };
+    const parsed = Number(record.value);
+    if (Number.isNaN(parsed) || parsed < 0) return { minutes: 60, source: "default" as const };
+    return { minutes: parsed, source: "db" as const };
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn("get global auto-reply cooldown failed", err);
+    return { minutes: 60, source: "default" as const };
+  }
+}
+
+export async function setGlobalAutoReplyCooldownMinutes(params: { minutes: number }) {
+  if (!isDbEnabled) return null;
+  try {
+    return await db.appSetting.upsert({
+      where: { key: "global_auto_reply_cooldown_minutes" },
+      create: { key: "global_auto_reply_cooldown_minutes", value: String(params.minutes) },
+      update: { value: String(params.minutes) },
+    });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn("set global auto-reply cooldown failed", err);
     return null;
   }
 }
@@ -610,6 +721,30 @@ export async function getTenantById(id?: string) {
   } catch (err) {
     // eslint-disable-next-line no-console
     console.warn("get tenant failed", err);
+    return null;
+  }
+}
+
+export async function getUnitById(id?: string) {
+  if (!isDbEnabled || !id) return null;
+  try {
+    return await db.unit.findUnique({ where: { id } });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn("get unit failed", err);
+    return null;
+  }
+}
+
+export async function findTenantByEmail(email?: string) {
+  if (!isDbEnabled || !email) return null;
+  const trimmed = email.trim();
+  if (!trimmed) return null;
+  try {
+    return await db.tenant.findFirst({ where: { email: trimmed } });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn("find tenant by email failed", err);
     return null;
   }
 }
@@ -826,7 +961,9 @@ export default {
   updateUnit,
   deleteUnit,
   getTenantById,
+  getUnitById,
   findTenantByPhone,
+  findTenantByEmail,
   findContractorByPhone,
   findLatestMaintenanceForTenantId,
   findLatestOpenMaintenance,
@@ -841,4 +978,10 @@ export default {
   updateUtilityCredential,
   deleteUtilityCredential,
   deleteMaintenance,
+  getGlobalAutoReplyEnabled,
+  setGlobalAutoReplyEnabled,
+  getGlobalAutoReplyDelayMinutes,
+  setGlobalAutoReplyDelayMinutes,
+  getGlobalAutoReplyCooldownMinutes,
+  setGlobalAutoReplyCooldownMinutes,
 };

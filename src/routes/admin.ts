@@ -3,6 +3,9 @@ import { z } from "zod";
 import repo from "../services/repository";
 import { MaintenanceStatus, UtilityType } from "@prisma/client";
 import whatsappService from "../services/whatsappService";
+import agentService from "../services/agentService";
+import { getWebhookStatus } from "../services/webhookStatus";
+import { addReminder, deleteReminder, listReminders } from "../services/reminderService";
 
 const router = express.Router();
 
@@ -12,6 +15,7 @@ const tenantSchema = z.object({
   phone: z.string().optional(),
   email: z.string().optional(),
   unitId: z.string().optional(),
+  autoReplyEnabled: z.boolean().optional(),
 });
 
 const tenantUpdateSchema = z.object({
@@ -19,6 +23,7 @@ const tenantUpdateSchema = z.object({
   phone: z.string().optional(),
   email: z.string().optional(),
   unitId: z.string().nullable().optional(),
+  autoReplyEnabled: z.boolean().optional(),
 });
 
 const contractorSchema = z.object({
@@ -87,22 +92,29 @@ const utilityBillSchema = z.object({
 
 const utilityBillUpdateSchema = utilityBillSchema.partial().omit({ utilityType: true }).extend({ amountCents: z.number().optional() });
 
-type Reminder = {
-  id: string;
-  type: "rent" | "utility";
-  dayOfMonth: number;
-  timeUtc: string;
-  style: "short" | "medium" | "professional" | "casual";
-};
-
-const reminders: Reminder[] = [];
 
 router.post("/tenants", async (req, res) => {
+  if (!process.env.DATABASE_URL) {
+    return res.status(503).json({ error: "db_disabled" });
+  }
   const parsed = tenantSchema.safeParse(req.body || {});
   if (!parsed.success) {
     return res.status(400).json({ error: "validation_failed", details: parsed.error.flatten() });
   }
+  if (parsed.data.phone) {
+    const existing = await repo.findTenantByPhone(parsed.data.phone);
+    if (existing) return res.status(409).json({ error: "phone_in_use" });
+  }
+  if (parsed.data.email) {
+    const existing = await repo.findTenantByEmail(parsed.data.email);
+    if (existing) return res.status(409).json({ error: "email_in_use" });
+  }
+  if (parsed.data.unitId) {
+    const unit = await repo.getUnitById(parsed.data.unitId);
+    if (!unit) return res.status(400).json({ error: "unit_not_found" });
+  }
   const tenant = await repo.createTenant(parsed.data);
+  if (!tenant) return res.status(500).json({ error: "tenant_create_failed" });
   res.json({ tenant });
 });
 
@@ -300,9 +312,51 @@ router.delete("/maintenance/:id", async (req, res) => {
   res.json({ deleted: true });
 });
 
-router.get("/health", (_req, res) => {
+router.get("/auto-reply", async (_req, res) => {
+  const setting = await repo.getGlobalAutoReplyEnabled();
+  res.json({ enabled: setting.enabled, source: setting.source });
+});
+
+router.get("/auto-reply-delay", async (_req, res) => {
+  const setting = await repo.getGlobalAutoReplyDelayMinutes();
+  res.json({ minutes: setting.minutes, source: setting.source });
+});
+
+router.get("/auto-reply-cooldown", async (_req, res) => {
+  const setting = await repo.getGlobalAutoReplyCooldownMinutes();
+  res.json({ minutes: setting.minutes, source: setting.source });
+});
+
+router.patch("/auto-reply", async (req, res) => {
+  const schema = z.object({ enabled: z.boolean() });
+  const parsed = schema.safeParse(req.body || {});
+  if (!parsed.success) return res.status(400).json({ error: "validation_failed", details: parsed.error.flatten() });
+  const updated = await repo.setGlobalAutoReplyEnabled({ enabled: parsed.data.enabled });
+  if (!updated) return res.status(500).json({ error: "auto_reply_update_failed" });
+  res.json({ enabled: parsed.data.enabled });
+});
+
+router.patch("/auto-reply-delay", async (req, res) => {
+  const schema = z.object({ minutes: z.number().min(0).max(120) });
+  const parsed = schema.safeParse(req.body || {});
+  if (!parsed.success) return res.status(400).json({ error: "validation_failed", details: parsed.error.flatten() });
+  const updated = await repo.setGlobalAutoReplyDelayMinutes({ minutes: parsed.data.minutes });
+  if (!updated) return res.status(500).json({ error: "auto_reply_delay_update_failed" });
+  res.json({ minutes: parsed.data.minutes });
+});
+
+router.patch("/auto-reply-cooldown", async (req, res) => {
+  const schema = z.object({ minutes: z.number().min(0).max(240) });
+  const parsed = schema.safeParse(req.body || {});
+  if (!parsed.success) return res.status(400).json({ error: "validation_failed", details: parsed.error.flatten() });
+  const updated = await repo.setGlobalAutoReplyCooldownMinutes({ minutes: parsed.data.minutes });
+  if (!updated) return res.status(500).json({ error: "auto_reply_cooldown_update_failed" });
+  res.json({ minutes: parsed.data.minutes });
+});
+
+router.get("/health", async (_req, res) => {
   const whatsappReady = Boolean(process.env.EVOLUTION_API_BASE_URL && process.env.EVOLUTION_API_TOKEN);
-  const llmReady = Boolean(process.env.GEMINI_API_KEY);
+  const llmReady = await agentService.pingLlm();
   const utilityReady = Boolean(process.env.UTILITY_AGENT_URL);
   const jeffyReady = Boolean(process.env.JEFFY_API_URL);
   res.json({
@@ -313,8 +367,12 @@ router.get("/health", (_req, res) => {
   });
 });
 
+router.get("/webhook-status", (_req, res) => {
+  res.json({ status: getWebhookStatus() });
+});
+
 router.get("/reminders", (_req, res) => {
-  res.json({ items: reminders });
+  res.json({ items: listReminders() });
 });
 
 router.post("/reminders", (req, res) => {
@@ -326,15 +384,13 @@ router.post("/reminders", (req, res) => {
   });
   const parsed = schema.safeParse(req.body || {});
   if (!parsed.success) return res.status(400).json({ error: "validation_failed", details: parsed.error.flatten() });
-  const reminder: Reminder = { id: `rem-${Date.now()}`, ...parsed.data } as Reminder;
-  reminders.push(reminder);
+  const reminder = addReminder({ id: `rem-${Date.now()}`, ...parsed.data });
   res.json({ reminder });
 });
 
 router.delete("/reminders/:id", (req, res) => {
-  const idx = reminders.findIndex((r) => r.id === req.params.id);
-  if (idx === -1) return res.status(404).json({ error: "not_found" });
-  reminders.splice(idx, 1);
+  const deleted = deleteReminder(req.params.id);
+  if (!deleted) return res.status(404).json({ error: "not_found" });
   res.json({ deleted: true });
 });
 

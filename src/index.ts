@@ -8,6 +8,7 @@ import apiRouter from "./routes/api";
 import adminRouter from "./routes/admin";
 import maintenanceRouter from "./routes/maintenance";
 import maintenanceListRouter from "./routes/maintenance-list";
+import { runDueReminders } from "./services/reminderService";
 
 dotenv.config();
 
@@ -40,3 +41,11 @@ app.listen(port, () => {
   // eslint-disable-next-line no-console
   console.log(`Landlord Stress Firewall listening on port ${port}`);
 });
+
+const REMINDER_POLL_MS = 30 * 1000;
+setInterval(() => {
+  runDueReminders().catch((err) => {
+    // eslint-disable-next-line no-console
+    console.warn("Reminder run failed", err);
+  });
+}, REMINDER_POLL_MS);
