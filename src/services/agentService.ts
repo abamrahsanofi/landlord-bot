@@ -228,6 +228,41 @@ async function runGemini(prompt: string) {
   return "llm_unavailable";
 }
 
+async function runGeminiVision(prompt: string, image: { base64: string; mimeType: string }) {
+  const model = ensureModel();
+  if (!model) {
+    return "vertex_not_configured";
+  }
+  const maxAttempts = 3;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      const result = await model.generateContent({
+        contents: [
+          {
+            role: "user",
+            parts: [
+              { text: prompt },
+              { inlineData: { data: image.base64, mimeType: image.mimeType } },
+            ],
+          },
+        ],
+      });
+      const parts = result.response?.candidates?.[0]?.content?.parts || [];
+      const text = parts.map((p) => (p as { text?: string }).text || "").join("");
+      return text.trim();
+    } catch (err) {
+      if (attempt >= maxAttempts || !shouldRetryLlm(err)) {
+        // eslint-disable-next-line no-console
+        console.warn("LLM vision request failed", err);
+        return "llm_unavailable";
+      }
+      const backoff = 600 * Math.pow(2, attempt - 1);
+      await delayMs(backoff);
+    }
+  }
+  return "llm_unavailable";
+}
+
 function safeParseJSON(text: string) {
   try {
     return JSON.parse(text);
@@ -633,6 +668,16 @@ export async function advisorSuggest(params: AdvisorSuggestionParams) {
   };
 }
 
+export async function summarizeImage(params: { base64: string; mimeType?: string; prompt?: string }): Promise<string> {
+  const prompt =
+    (params.prompt || "").trim() ||
+    "Describe what you see in the image that matters for property maintenance. Keep it short and factual.";
+  const mimeType = params.mimeType || "image/jpeg";
+  const text = await runGeminiVision(prompt, { base64: params.base64, mimeType });
+  if (isLlmFallback(text)) return "";
+  return text;
+}
+
 export async function generateReminderMessage(params: ReminderMessageParams) {
   const style = params.style || "short";
   const type = params.type || "rent";
@@ -662,6 +707,7 @@ export default {
   draftRtaResponse,
   refineDraft,
   advisorSuggest,
+  summarizeImage,
   generateReminderMessage,
   pingLlm,
 };

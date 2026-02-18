@@ -91,7 +91,7 @@ function isLandlordNumber(phone: string) {
 
 function extractWhatsAppText(payload: any): string {
   const data = payload?.data || payload;
-  return (
+  const candidate =
     data?.message?.conversation ||
     data?.message?.extendedTextMessage?.text ||
     data?.message?.text ||
@@ -99,8 +99,14 @@ function extractWhatsAppText(payload: any): string {
     data?.message?.videoMessage?.caption ||
     data?.text ||
     data?.message ||
-    ""
-  );
+    "";
+  if (typeof candidate === "string") return candidate;
+  if (typeof candidate === "number") return String(candidate);
+  if (candidate && typeof candidate === "object") {
+    if (typeof (candidate as any).text === "string") return (candidate as any).text;
+    if (typeof (candidate as any).conversation === "string") return (candidate as any).conversation;
+  }
+  return "";
 }
 
 function extractWhatsAppMediaDescription(payload: any): string {
@@ -115,6 +121,52 @@ function extractWhatsAppMediaDescription(payload: any): string {
   if (data?.message?.audioMessage || data?.message?.ptt) return `[voice note received]`.trim();
   if (data?.message?.documentMessage) return `[document received] ${caption}`.trim();
   return "";
+}
+
+type InlineImagePayload = { base64: string; mimeType: string };
+
+function parseInlineImageData(raw: string, fallbackMimeType: string): InlineImagePayload {
+  const trimmed = raw.trim().replace(/\s+/g, "");
+  const match = /^data:(image\/[^;]+);base64,(.*)$/i.exec(trimmed);
+  if (match?.[1] && match?.[2]) {
+    return { base64: match[2], mimeType: match[1] };
+  }
+  return { base64: trimmed, mimeType: fallbackMimeType };
+}
+
+function extractWhatsAppImageBase64(payload: any): InlineImagePayload | null {
+  const data = payload?.data || payload;
+  const candidates = [
+    data?.message?.imageMessage?.base64,
+    data?.message?.imageMessage?.imageBase64,
+    data?.message?.imageMessage?.media?.base64,
+    data?.message?.imageMessage?.media?.data,
+    data?.message?.imageMessage?.data,
+    data?.message?.base64,
+    data?.base64,
+  ];
+  const raw = candidates.find((entry) => typeof entry === "string" && entry.trim());
+  if (!raw) return null;
+  const mimeType =
+    data?.message?.imageMessage?.mimetype ||
+    data?.message?.imageMessage?.mimeType ||
+    data?.mimeType ||
+    "image/jpeg";
+  return parseInlineImageData(raw, mimeType);
+}
+
+function formatRecentConversation(entries: any[], limit = 4) {
+  if (!Array.isArray(entries) || !entries.length) return "";
+  return entries
+    .filter((entry) => entry?.role === "tenant" || entry?.role === "ai")
+    .slice(-limit)
+    .map((entry) => {
+      const who = (entry?.role || "unknown").toUpperCase();
+      const text = entry?.content || "";
+      return `${who}: ${text}`.trim();
+    })
+    .filter(Boolean)
+    .join("\n");
 }
 
 function extractWhatsAppSenderInfo(payload: any) {
@@ -348,8 +400,9 @@ router.post("/whatsapp/evolution", async (req, res) => {
     let autoReplyReason: string | undefined;
     const text = extractWhatsAppText(req.body)?.trim();
     const mediaNote = extractWhatsAppMediaDescription(req.body)?.trim();
+    const imagePayload = extractWhatsAppImageBase64(req.body);
     const inboundContent = [text, mediaNote].filter(Boolean).join(" ").trim();
-    if (!inboundContent) return res.json({ ok: true, ignored: "no_text" });
+    if (!inboundContent && !imagePayload) return res.json({ ok: true, ignored: "no_text" });
     const { remoteJid, participant, isGroup, sender, replyTo } = extractWhatsAppSenderInfo(req.body);
     if (!sender) {
       // For groups, ignore when no participant phone is available.
@@ -522,7 +575,33 @@ router.post("/whatsapp/evolution", async (req, res) => {
     }
 
     let record = await repo.findLatestMaintenanceForTenantId(tenant.id);
-    const tenantMessage = inboundContent;
+    const baseConversationLog = Array.isArray(record?.chatLog) ? (record?.chatLog as any[]) : [];
+    let visionSummary = "";
+    if (imagePayload?.base64) {
+      const hasText = Boolean(text);
+      const recentContext = hasText ? "" : formatRecentConversation(baseConversationLog, 2);
+      const visionPrompt = [
+        "You are describing an image. Be literal and avoid guessing context.",
+        "Describe people, objects, and the scene only if clearly visible.",
+        "If you are not sure, say so. Do not infer maintenance issues unless explicitly visible.",
+        "Keep it short and factual (2-3 sentences).",
+        hasText ? `Tenant message: ${text}` : "",
+        recentContext ? `Recent conversation:\n${recentContext}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n\n");
+      visionSummary = await agentService.summarizeImage({
+        base64: imagePayload.base64,
+        mimeType: imagePayload.mimeType,
+        prompt: visionPrompt,
+      });
+      if (visionSummary) llmInvoked = true;
+    }
+
+    const chatContent = inboundContent || "[image received]";
+    const tenantMessage = [inboundContent, visionSummary ? `Image summary: ${visionSummary}` : ""]
+      .filter(Boolean)
+      .join("\n");
     const triage = await agentService.triageMaintenance({
       tenantMessage,
       tenantId: tenant.id,
@@ -542,14 +621,20 @@ router.post("/whatsapp/evolution", async (req, res) => {
       record = await repo.appendChatMessage({
         id: record.id,
         role: "tenant",
-        content: tenantMessage,
-        meta: { channel: isGroup ? "whatsapp_group" : "whatsapp", sender, media: Boolean(mediaNote) },
+        content: chatContent,
+        meta: {
+          channel: isGroup ? "whatsapp_group" : "whatsapp",
+          sender,
+          media: Boolean(mediaNote) || Boolean(imagePayload?.base64),
+          visionSummary: visionSummary || undefined,
+          imageMimeType: imagePayload?.mimeType,
+        },
       });
     } else {
       record = await repo.createMaintenanceRequest({
         tenantId: tenant.id,
         unitId: undefined,
-        message: tenantMessage,
+        message: inboundContent || tenantMessage,
         triage,
         autopilotEnabled: true,
       });
@@ -565,7 +650,7 @@ router.post("/whatsapp/evolution", async (req, res) => {
         replyTo,
         isGroup,
         tenantMessage,
-        media: Boolean(mediaNote),
+        media: Boolean(mediaNote) || Boolean(imagePayload?.base64),
         delayMs,
       });
       autoReplyReason = "queued_delay";
