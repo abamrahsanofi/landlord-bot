@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { vertexAI, defaultModel } from "../config/gemini";
+import { getProfile } from "../config/rtaProfiles";
 
 type TriageResult = {
   summary: string;
@@ -275,9 +276,11 @@ export async function triageMaintenance(params: {
   tenantMessage?: string;
   tenantId?: string;
   unitId?: string;
+  province?: string;
 }): Promise<TriageResult> {
   const { rtaSkill, billingSkill } = loadSkills();
   const tenantMessage = params.tenantMessage || "";
+  const rtaProfile = getProfile(params.province || "ON");
 
   if (!modelAvailable()) {
     return {
@@ -291,6 +294,8 @@ export async function triageMaintenance(params: {
 
   const prompt = [
     "You are a landlord maintenance triage agent. Return JSON only.",
+    `Jurisdiction: ${rtaProfile.name} — ${rtaProfile.legislation}`,
+    rtaProfile.promptAddendum,
     "Use RTA procedure and utility-billing awareness to classify the issue.",
     "Output fields: summary (string), classification {severity: critical|high|normal|low, category, urgencyHours}, recommendedActions (array), dataRequests (array).",
     "Keep summary short and factual.",
@@ -435,9 +440,11 @@ export async function draftRtaResponse(params: {
   utilityCheck: UtilityCheckResult;
   conversationLog?: ConversationEntry[] | null;
   landlordReply?: string | null;
+  province?: string;
 }): Promise<DraftResult> {
   const { rtaSkill } = loadSkills();
   const { tenantSoul } = loadSouls();
+  const rtaProfile = getProfile(params.province || "ON");
 
   const basePayload = {
     skillLoaded: Boolean(rtaSkill),
@@ -457,13 +464,28 @@ export async function draftRtaResponse(params: {
   const landlordPosition = (params.landlordReply || "").trim();
 
   const prompt = [
-    "You are the landlord-side assistant. Draft a casual, RTA-aware reply for the tenant.",
+    "You are the landlord-side assistant. Draft a casual, legally-aware reply for the tenant.",
+    `Jurisdiction: ${rtaProfile.name} — ${rtaProfile.legislation}`,
+    rtaProfile.promptAddendum,
     "Keep it short and conversational. 2-4 sentences, max 70 words. No headings, bullet points, or signatures.",
     "Confirm you've seen the message, summarize the situation, outline the next concrete step with timing, and stay neutral about fault.",
     "Blend any recommended actions or information requests into normal sentences instead of labeled lists.",
     tenantSoul ? "--- TENANT SOUL ---\n" + tenantSoul : "",
-    "Reference prior tenant or landlord notes so it feels like part of the ongoing chat, and only mention Ontario RTA if it truly helps.",
+    "Reference prior tenant or landlord notes so it feels like part of the ongoing chat, and only mention tenancy law if it truly helps.",
     "Do not send notices automatically; this is a draft for landlord approval.",
+    "",
+    "═══ CRITICAL — NO EMPTY PROMISES ═══",
+    "NEVER promise to do something you cannot actually do in this response. Examples of what NOT to say:",
+    "- 'I'll find the user manual and send it to you in an hour'",
+    "- 'I'll look into this and get back to you with instructions'",
+    "- 'I'll send you a link to the manual shortly'",
+    "Instead, provide IMMEDIATE VALUE from your existing knowledge:",
+    "- Share general troubleshooting steps you already know (reset procedures, common fixes)",
+    "- Suggest the tenant check manufacturer website for their specific model",
+    "- Give practical next steps like 'try resetting the thermostat by switching it off and on at the breaker'",
+    "- If you recognize the product model, share what you know about common issues with it",
+    "Be helpful NOW — don't defer help to a future action you can't take.",
+    "",
     "--- RTA SKILL ---",
     rtaSkill,
     "--- TRIAGE ---",
@@ -501,6 +523,7 @@ type RefineDraftParams = {
   tenantMessage?: string;
   conversationLog?: ConversationEntry[] | null;
   landlordReply?: string | null;
+  province?: string;
 };
 
 export async function refineDraft(params: RefineDraftParams): Promise<DraftResult> {
@@ -549,7 +572,7 @@ export async function refineDraft(params: RefineDraftParams): Promise<DraftResul
     "You are the landlord's assistant. Rewrite the draft per the landlord's instructions with an easygoing, human tone.",
     "Keep it short and conversational. 2-4 sentences, max 70 words. No headings, bullet points, or signatures.",
     "Work the triage next steps and any missing info into the prose instead of lists, and keep liability-neutral.",
-    "Use conversation history to keep continuity and only mention Ontario RTA if it genuinely supports the point.",
+    `Use conversation history to keep continuity and only mention ${params.province ? getProfile(params.province).legislation : "tenancy law"} if it genuinely supports the point.`,
     tenantSoul ? "--- TENANT SOUL ---\n" + tenantSoul : "",
     "--- TRIAGE ---",
     JSON.stringify(params.triage || {}, null, 2),
@@ -594,6 +617,7 @@ type AdvisorSuggestionParams = {
   tenantMessage?: string;
   conversationLog?: ConversationEntry[] | null;
   landlordReply?: string | null;
+  province?: string;
 };
 
 type ReminderMessageParams = {
@@ -633,7 +657,7 @@ export async function advisorSuggest(params: AdvisorSuggestionParams) {
     "You are the landlord's assistant coach.",
     "Reply with a short, conversational response only. Do not use JSON.",
     "2-3 sentences, max 60 words. No headings, bullet points, or sign-offs.",
-    "Keep it casual and practical, weaving in Ontario RTA only when essential.",
+    `Keep it casual and practical, weaving in ${params.province ? getProfile(params.province).legislation : "tenancy law"} only when essential.`,
     landlordSoul ? "--- LANDLORD SOUL ---\n" + landlordSoul : "",
     params.triage ? "--- TRIAGE ---\n" + JSON.stringify(params.triage, null, 2) : "",
     params.tenantMessage ? "--- TENANT MESSAGE ---\n" + params.tenantMessage : "",

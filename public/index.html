@@ -1,0 +1,1162 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NestMind AI — AI Property Management for Landlords</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+        rel="stylesheet" />
+    <style>
+        :root {
+            --bg: #000000;
+            --bg-elevated: #0a0a0a;
+            --surface: #111111;
+            --surface-2: #1a1a1a;
+            --border: #222222;
+            --border-light: #333333;
+            --text: #ffffff;
+            --text-secondary: #999999;
+            --text-muted: #666666;
+            --accent: #00c896;
+            --accent-glow: rgba(0, 200, 150, 0.15);
+            --accent-2: #7c5cff;
+            --gradient: linear-gradient(135deg, #00c896, #7c5cff);
+            --gradient-text: linear-gradient(135deg, #00c896 0%, #7c5cff 100%);
+            --radius: 16px;
+            --radius-sm: 10px;
+            --shadow: 0 24px 80px rgba(0, 0, 0, 0.5);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            overflow-x: hidden;
+            line-height: 1.6;
+        }
+
+        /* ── NAV ── */
+        nav {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 100;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border);
+            padding: 0 40px;
+        }
+
+        .nav-inner {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            height: 72px;
+        }
+
+        .nav-logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            text-decoration: none;
+        }
+
+        .nav-logo-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            background: var(--gradient);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+        }
+
+        .nav-logo-text {
+            font-weight: 700;
+            font-size: 18px;
+            color: #fff;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 32px;
+            align-items: center;
+        }
+
+        .nav-links a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+            transition: color 0.2s;
+        }
+
+        .nav-links a:hover {
+            color: #fff;
+        }
+
+        .nav-cta {
+            background: #fff;
+            color: #000;
+            padding: 10px 24px;
+            border-radius: 100px;
+            font-weight: 600;
+            font-size: 14px;
+            text-decoration: none;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .nav-cta:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 8px 30px rgba(255, 255, 255, 0.15);
+        }
+
+        .mobile-menu {
+            display: none;
+            background: none;
+            border: none;
+            color: #fff;
+            font-size: 24px;
+            cursor: pointer;
+        }
+
+        /* ── HERO ── */
+        .hero {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 120px 40px 80px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .hero::before {
+            content: '';
+            position: absolute;
+            width: 600px;
+            height: 600px;
+            background: radial-gradient(circle, var(--accent-glow) 0%, transparent 70%);
+            top: 10%;
+            left: 50%;
+            transform: translateX(-50%);
+            pointer-events: none;
+        }
+
+        .hero-content {
+            max-width: 900px;
+            text-align: center;
+            position: relative;
+            z-index: 1;
+        }
+
+        .hero-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            padding: 8px 16px;
+            border-radius: 100px;
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin-bottom: 32px;
+        }
+
+        .hero-badge .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--accent);
+        }
+
+        .hero h1 {
+            font-size: clamp(42px, 6vw, 72px);
+            font-weight: 800;
+            line-height: 1.1;
+            letter-spacing: -2px;
+            margin-bottom: 24px;
+        }
+
+        .hero h1 .gradient {
+            background: var(--gradient-text);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .hero-rotating {
+            display: inline-block;
+            min-width: 280px;
+            text-align: left;
+        }
+
+        .hero p {
+            font-size: 18px;
+            color: var(--text-secondary);
+            max-width: 560px;
+            margin: 0 auto 40px;
+            line-height: 1.7;
+        }
+
+        .hero-buttons {
+            display: flex;
+            gap: 16px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .btn-lg {
+            padding: 16px 36px;
+            border-radius: 100px;
+            font-size: 15px;
+            font-weight: 600;
+            text-decoration: none;
+            transition: all 0.2s;
+            border: none;
+            cursor: pointer;
+        }
+
+        .btn-filled {
+            background: #fff;
+            color: #000;
+        }
+
+        .btn-filled:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 40px rgba(255, 255, 255, 0.15);
+        }
+
+        .btn-outline {
+            background: transparent;
+            color: #fff;
+            border: 1px solid var(--border-light);
+        }
+
+        .btn-outline:hover {
+            border-color: #fff;
+        }
+
+        /* ── MARQUEE ── */
+        .marquee-wrap {
+            border-top: 1px solid var(--border);
+            border-bottom: 1px solid var(--border);
+            padding: 20px 0;
+            overflow: hidden;
+            white-space: nowrap;
+        }
+
+        .marquee {
+            display: inline-flex;
+            animation: marquee 25s linear infinite;
+        }
+
+        .marquee span {
+            font-size: 14px;
+            font-weight: 600;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            padding: 0 24px;
+        }
+
+        .marquee .dot-sep {
+            color: var(--accent);
+        }
+
+        @keyframes marquee {
+            0% {
+                transform: translateX(0);
+            }
+
+            100% {
+                transform: translateX(-50%);
+            }
+        }
+
+        /* ── SECTIONS ── */
+        .section {
+            padding: 120px 40px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .section-label {
+            font-size: 13px;
+            font-weight: 600;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            color: var(--accent);
+            margin-bottom: 16px;
+        }
+
+        .section-title {
+            font-size: clamp(32px, 4vw, 48px);
+            font-weight: 700;
+            letter-spacing: -1px;
+            margin-bottom: 16px;
+            line-height: 1.2;
+        }
+
+        .section-sub {
+            font-size: 16px;
+            color: var(--text-secondary);
+            max-width: 560px;
+            line-height: 1.7;
+            margin-bottom: 60px;
+        }
+
+        /* ── NUMBERED FEATURES ── */
+        .features {
+            display: flex;
+            flex-direction: column;
+            gap: 100px;
+        }
+
+        .feature-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 60px;
+            align-items: center;
+        }
+
+        .feature-row.reverse {
+            direction: rtl;
+        }
+
+        .feature-row.reverse>* {
+            direction: ltr;
+        }
+
+        .feature-number {
+            font-size: 80px;
+            font-weight: 800;
+            line-height: 1;
+            background: var(--gradient-text);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 16px;
+        }
+
+        .feature-title {
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 12px;
+        }
+
+        .feature-desc {
+            font-size: 15px;
+            color: var(--text-secondary);
+            line-height: 1.8;
+            margin-bottom: 20px;
+        }
+
+        .feature-tags {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .feature-tag {
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            padding: 6px 14px;
+            border-radius: 100px;
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--text-secondary);
+        }
+
+        .feature-visual {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 32px;
+            min-height: 320px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: var(--shadow);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .feature-visual::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(180deg, transparent 60%, var(--bg) 100%);
+            pointer-events: none;
+        }
+
+        .feature-mock {
+            width: 100%;
+            font-size: 13px;
+            color: var(--text-secondary);
+            font-family: 'Courier New', monospace;
+            line-height: 1.7;
+        }
+
+        .feature-mock .hl {
+            color: var(--accent);
+        }
+
+        .feature-mock .hl2 {
+            color: var(--accent-2);
+        }
+
+        .chat-mock {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            width: 100%;
+        }
+
+        .chat-bubble {
+            padding: 12px 16px;
+            border-radius: 14px;
+            font-size: 13px;
+            max-width: 85%;
+            line-height: 1.5;
+        }
+
+        .chat-tenant {
+            background: var(--surface-2);
+            align-self: flex-start;
+            border: 1px solid var(--border);
+        }
+
+        .chat-ai {
+            background: rgba(0, 200, 150, 0.1);
+            border: 1px solid rgba(0, 200, 150, 0.2);
+            align-self: flex-end;
+            color: var(--accent);
+        }
+
+        .chat-label {
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 4px;
+            color: var(--text-muted);
+        }
+
+        /* ── PRICING ── */
+        .pricing-header {
+            text-align: center;
+            margin-bottom: 60px;
+        }
+
+        .pricing-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 24px;
+        }
+
+        .price-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 36px;
+            position: relative;
+            transition: transform 0.3s, border-color 0.3s;
+        }
+
+        .price-card:hover {
+            transform: translateY(-4px);
+            border-color: var(--border-light);
+        }
+
+        .price-card.popular {
+            border-color: var(--accent);
+        }
+
+        .price-card.popular::before {
+            content: 'Popular';
+            position: absolute;
+            top: -12px;
+            right: 24px;
+            background: var(--gradient);
+            color: #fff;
+            font-size: 12px;
+            font-weight: 600;
+            padding: 4px 14px;
+            border-radius: 100px;
+        }
+
+        .price-tier {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            margin-bottom: 16px;
+        }
+
+        .price-amount {
+            font-size: 48px;
+            font-weight: 800;
+            margin-bottom: 8px;
+            line-height: 1;
+        }
+
+        .price-period {
+            font-size: 14px;
+            color: var(--text-muted);
+            margin-bottom: 24px;
+        }
+
+        .price-desc {
+            font-size: 14px;
+            color: var(--text-secondary);
+            margin-bottom: 28px;
+            line-height: 1.6;
+            min-height: 48px;
+        }
+
+        .price-features {
+            list-style: none;
+            margin-bottom: 32px;
+        }
+
+        .price-features li {
+            padding: 10px 0;
+            font-size: 14px;
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .price-features li:last-child {
+            border-bottom: none;
+        }
+
+        .price-features .check {
+            color: var(--accent);
+            font-weight: 600;
+        }
+
+        .price-btn {
+            display: block;
+            width: 100%;
+            padding: 14px;
+            border-radius: 100px;
+            text-align: center;
+            font-weight: 600;
+            font-size: 14px;
+            cursor: pointer;
+            text-decoration: none;
+            transition: all 0.2s;
+            border: none;
+        }
+
+        .price-btn-primary {
+            background: #fff;
+            color: #000;
+        }
+
+        .price-btn-primary:hover {
+            box-shadow: 0 8px 30px rgba(255, 255, 255, 0.15);
+        }
+
+        .price-btn-outline {
+            background: transparent;
+            color: #fff;
+            border: 1px solid var(--border-light);
+        }
+
+        .price-btn-outline:hover {
+            border-color: #fff;
+        }
+
+        /* ── FAQ ── */
+        .faq-header {
+            text-align: center;
+            margin-bottom: 60px;
+        }
+
+        .faq-label {
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            margin-bottom: 12px;
+        }
+
+        .faq-list {
+            max-width: 720px;
+            margin: 0 auto;
+        }
+
+        .faq-item {
+            border-bottom: 1px solid var(--border);
+            cursor: pointer;
+        }
+
+        .faq-q {
+            padding: 24px 0;
+            font-size: 16px;
+            font-weight: 600;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .faq-q .arrow {
+            transition: transform 0.3s;
+            font-size: 20px;
+            color: var(--text-muted);
+        }
+
+        .faq-item.open .arrow {
+            transform: rotate(45deg);
+        }
+
+        .faq-a {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.4s ease, padding 0.3s;
+            font-size: 14px;
+            color: var(--text-secondary);
+            line-height: 1.8;
+        }
+
+        .faq-item.open .faq-a {
+            max-height: 200px;
+            padding-bottom: 24px;
+        }
+
+        /* ── FOOTER ── */
+        footer {
+            border-top: 1px solid var(--border);
+            padding: 60px 40px;
+        }
+
+        .footer-inner {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 40px;
+            flex-wrap: wrap;
+        }
+
+        .footer-brand {
+            max-width: 300px;
+        }
+
+        .footer-brand p {
+            font-size: 14px;
+            color: var(--text-muted);
+            margin-top: 12px;
+            line-height: 1.7;
+        }
+
+        .footer-links h4 {
+            font-size: 13px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-secondary);
+            margin-bottom: 16px;
+        }
+
+        .footer-links a {
+            display: block;
+            color: var(--text-muted);
+            font-size: 14px;
+            text-decoration: none;
+            padding: 4px 0;
+            transition: color 0.2s;
+        }
+
+        .footer-links a:hover {
+            color: #fff;
+        }
+
+        .footer-bottom {
+            max-width: 1200px;
+            margin: 40px auto 0;
+            padding-top: 24px;
+            border-top: 1px solid var(--border);
+            text-align: center;
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+
+        /* ── CTA BANNER ── */
+        .cta-banner {
+            margin: 0 40px 80px;
+            padding: 80px 40px;
+            text-align: center;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            max-width: 1200px;
+            margin-left: auto;
+            margin-right: auto;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .cta-banner::before {
+            content: '';
+            position: absolute;
+            width: 500px;
+            height: 500px;
+            background: radial-gradient(circle, var(--accent-glow) 0%, transparent 70%);
+            top: -200px;
+            right: -100px;
+            pointer-events: none;
+        }
+
+        .cta-banner h2 {
+            font-size: 36px;
+            font-weight: 700;
+            margin-bottom: 12px;
+            position: relative;
+        }
+
+        .cta-banner p {
+            font-size: 16px;
+            color: var(--text-secondary);
+            margin-bottom: 32px;
+            position: relative;
+        }
+
+        /* ── RESPONSIVE ── */
+        @media (max-width: 768px) {
+            nav {
+                padding: 0 20px;
+            }
+
+            .nav-links {
+                display: none;
+            }
+
+            .mobile-menu {
+                display: block;
+            }
+
+            .hero {
+                padding: 120px 20px 60px;
+            }
+
+            .section {
+                padding: 80px 20px;
+            }
+
+            .feature-row,
+            .feature-row.reverse {
+                grid-template-columns: 1fr;
+                gap: 30px;
+            }
+
+            .pricing-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .footer-inner {
+                flex-direction: column;
+            }
+
+            .cta-banner {
+                margin: 0 20px 60px;
+                padding: 60px 20px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- NAV -->
+    <nav>
+        <div class="nav-inner">
+            <a href="/" class="nav-logo">
+                <div class="nav-logo-icon">🏠</div>
+                <span class="nav-logo-text">NestMind AI</span>
+            </a>
+            <div class="nav-links">
+                <a href="#features">Features</a>
+                <a href="#pricing">Pricing</a>
+                <a href="#faq">FAQ</a>
+                <a href="/login">Login</a>
+                <a href="/signup" class="nav-cta">Get Started</a>
+            </div>
+            <button class="mobile-menu"
+                onclick="document.querySelector('.nav-links').style.display=document.querySelector('.nav-links').style.display==='flex'?'none':'flex'">☰</button>
+        </div>
+    </nav>
+
+    <!-- HERO -->
+    <section class="hero">
+        <div class="hero-content">
+            <div class="hero-badge"><span class="dot"></span> AI-Powered Property Management</div>
+            <h1>
+                Smart AI Agent for<br />
+                <span class="gradient hero-rotating" id="rotatingText">Landlords</span>
+            </h1>
+            <p>NestMind AI handles tenant communication, maintenance triage, utility monitoring, and legal compliance —
+                all through WhatsApp. Your AI property manager that never sleeps.</p>
+            <div class="hero-buttons">
+                <a href="/signup" class="btn-lg btn-filled">Start Free →</a>
+                <a href="#features" class="btn-lg btn-outline">See How It Works</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- MARQUEE -->
+    <div class="marquee-wrap">
+        <div class="marquee">
+            <span>Maintenance</span><span class="dot-sep">·</span>
+            <span>Triage</span><span class="dot-sep">·</span>
+            <span>WhatsApp</span><span class="dot-sep">·</span>
+            <span>Compliance</span><span class="dot-sep">·</span>
+            <span>Utilities</span><span class="dot-sep">·</span>
+            <span>AI Agent</span><span class="dot-sep">·</span>
+            <span>Autopilot</span><span class="dot-sep">·</span>
+            <span>Web Scraping</span><span class="dot-sep">·</span>
+            <span>Maintenance</span><span class="dot-sep">·</span>
+            <span>Triage</span><span class="dot-sep">·</span>
+            <span>WhatsApp</span><span class="dot-sep">·</span>
+            <span>Compliance</span><span class="dot-sep">·</span>
+            <span>Utilities</span><span class="dot-sep">·</span>
+            <span>AI Agent</span><span class="dot-sep">·</span>
+            <span>Autopilot</span><span class="dot-sep">·</span>
+            <span>Web Scraping</span><span class="dot-sep">·</span>
+        </div>
+    </div>
+
+    <!-- FEATURES -->
+    <section class="section" id="features">
+        <div class="section-label">How It Works</div>
+        <h2 class="section-title">Everything your property<br />management needs</h2>
+        <p class="section-sub">NestMind AI uses an agentic framework — it plans, uses tools, and takes action
+            autonomously so you don't have to.</p>
+
+        <div class="features">
+
+            <!-- Feature 1 -->
+            <div class="feature-row">
+                <div>
+                    <div class="feature-number">1</div>
+                    <h3 class="feature-title">AI Tenant Communication</h3>
+                    <p class="feature-desc">Tenants message you on WhatsApp. NestMind AI triages their request,
+                        classifies severity, and drafts a legally-compliant reply — all before you even see it.</p>
+                    <div class="feature-tags">
+                        <span class="feature-tag">WhatsApp</span>
+                        <span class="feature-tag">Auto-Reply</span>
+                        <span class="feature-tag">Smart Triage</span>
+                    </div>
+                </div>
+                <div class="feature-visual">
+                    <div class="chat-mock">
+                        <div class="chat-bubble chat-tenant">
+                            <div class="chat-label">Tenant</div>
+                            Hey, the kitchen faucet is leaking pretty badly. Water everywhere 😩
+                        </div>
+                        <div class="chat-bubble chat-ai">
+                            <div class="chat-label">NestMind AI</div>
+                            Hi Sarah! I've logged this as urgent. A plumber has been notified. Please turn off the valve
+                            under the sink if possible. We'll follow up within 2 hours. 🔧
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Feature 2 -->
+            <div class="feature-row reverse">
+                <div>
+                    <div class="feature-number">2</div>
+                    <h3 class="feature-title">Smart Maintenance Triage</h3>
+                    <p class="feature-desc">Every request is automatically classified by severity, category, and
+                        urgency. Critical issues trigger instant alerts. Routine requests are queued intelligently.</p>
+                    <div class="feature-tags">
+                        <span class="feature-tag">Severity Detection</span>
+                        <span class="feature-tag">Auto-Dispatch</span>
+                        <span class="feature-tag">Contractor Matching</span>
+                    </div>
+                </div>
+                <div class="feature-visual">
+                    <div class="feature-mock">
+                        <div><span class="hl">triage</span>.classify(message) → {</div>
+                        <div> severity: <span class="hl2">"HIGH"</span>,</div>
+                        <div> category: <span class="hl2">"plumbing"</span>,</div>
+                        <div> urgency: <span class="hl2">"immediate"</span>,</div>
+                        <div> actions: [</div>
+                        <div> <span class="hl">"dispatch_contractor"</span>,</div>
+                        <div> <span class="hl">"alert_landlord"</span>,</div>
+                        <div> <span class="hl">"draft_reply"</span></div>
+                        <div> ]</div>
+                        <div>}</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Feature 3 -->
+            <div class="feature-row">
+                <div>
+                    <div class="feature-number">3</div>
+                    <h3 class="feature-title">Utility Monitoring</h3>
+                    <p class="feature-desc">NestMind AI logs into utility portals, scrapes the latest bills, detects
+                        anomalies, and alerts you when something looks off — fully automated.</p>
+                    <div class="feature-tags">
+                        <span class="feature-tag">Web Scraping</span>
+                        <span class="feature-tag">Bill Tracking</span>
+                        <span class="feature-tag">Anomaly Detection</span>
+                    </div>
+                </div>
+                <div class="feature-visual">
+                    <div class="feature-mock">
+                        <div><span class="hl">agent</span>.run("Check hydro bill") → {</div>
+                        <div> tool_calls: [</div>
+                        <div> <span class="hl2">get_utility_credentials</span>,</div>
+                        <div> <span class="hl2">scrape_utility_bill</span>,</div>
+                        <div> <span class="hl2">lookup_utility_bills</span></div>
+                        <div> ],</div>
+                        <div> result: <span class="hl">"$127.45 — 23% ↑"</span></div>
+                        <div>}</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Feature 4 -->
+            <div class="feature-row reverse">
+                <div>
+                    <div class="feature-number">4</div>
+                    <h3 class="feature-title">Legal Compliance Engine</h3>
+                    <p class="feature-desc">Built-in tenancy law profiles for 12 jurisdictions. Every auto-reply is
+                        reviewed against local RTA regulations. Never send a message that could get you in trouble.</p>
+                    <div class="feature-tags">
+                        <span class="feature-tag">Ontario RTA</span>
+                        <span class="feature-tag">BC RTBA</span>
+                        <span class="feature-tag">Multi-Province</span>
+                    </div>
+                </div>
+                <div class="feature-visual">
+                    <div class="feature-mock">
+                        <div><span class="hl">rta_info</span>("ON") → {</div>
+                        <div> legislation: <span class="hl2">"RTA 2006"</span>,</div>
+                        <div> notice_period: <span class="hl2">"24 hours"</span>,</div>
+                        <div> rent_increase: <span class="hl2">"guideline only"</span>,</div>
+                        <div> emergency: <span class="hl2">"immediate entry OK"</span>,</div>
+                        <div> tribunal: <span class="hl2">"LTB"</span></div>
+                        <div>}</div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </section>
+
+    <!-- PRICING -->
+    <section class="section" id="pricing">
+        <div class="pricing-header">
+            <div class="section-label">Pricing</div>
+            <h2 class="section-title">Built for you, priced to scale</h2>
+            <p class="section-sub" style="margin:12px auto 0">Choose a plan that fits your portfolio. Start free,
+                upgrade when you grow.</p>
+        </div>
+
+        <div class="pricing-grid">
+            <!-- Starter -->
+            <div class="price-card">
+                <div class="price-tier">Starter</div>
+                <div class="price-amount">Free</div>
+                <div class="price-period">Up to 3 units</div>
+                <div class="price-desc">Perfect for landlords starting out. Get AI tenant communication with zero cost.
+                </div>
+                <ul class="price-features">
+                    <li><span class="check">✓</span> AI Tenant Triage</li>
+                    <li><span class="check">✓</span> WhatsApp Auto-Reply</li>
+                    <li><span class="check">✓</span> Maintenance Tracking</li>
+                    <li><span class="check">✓</span> Legal Compliance (1 Province)</li>
+                    <li><span class="check">✓</span> Dashboard Access</li>
+                </ul>
+                <a href="/signup" class="price-btn price-btn-outline">Get Started Free</a>
+            </div>
+
+            <!-- Pro -->
+            <div class="price-card popular">
+                <div class="price-tier">Professional</div>
+                <div class="price-amount">$29<span style="font-size:20px;font-weight:500">/mo</span></div>
+                <div class="price-period">Up to 25 units</div>
+                <div class="price-desc">For growing portfolios. Full agent tools, utility scraping, and contractor
+                    dispatch.</div>
+                <ul class="price-features">
+                    <li><span class="check">✓</span> Everything in Starter</li>
+                    <li><span class="check">✓</span> AI Agent with 15+ Tools</li>
+                    <li><span class="check">✓</span> Utility Bill Scraping</li>
+                    <li><span class="check">✓</span> Contractor Auto-Dispatch</li>
+                    <li><span class="check">✓</span> Multi-Province Compliance</li>
+                    <li><span class="check">✓</span> Priority WhatsApp Support</li>
+                </ul>
+                <a href="/signup" class="price-btn price-btn-primary">Start Pro Trial</a>
+            </div>
+
+            <!-- Enterprise -->
+            <div class="price-card">
+                <div class="price-tier">Enterprise</div>
+                <div class="price-amount">Custom</div>
+                <div class="price-period">Unlimited units</div>
+                <div class="price-desc">Full white-glove setup. Custom integrations, dedicated support, and workflow
+                    automation.</div>
+                <ul class="price-features">
+                    <li><span class="check">✓</span> Everything in Professional</li>
+                    <li><span class="check">✓</span> Custom AI Workflows</li>
+                    <li><span class="check">✓</span> API Access</li>
+                    <li><span class="check">✓</span> Dedicated Account Manager</li>
+                    <li><span class="check">✓</span> SLA & Uptime Guarantee</li>
+                    <li><span class="check">✓</span> Multi-Landlord Support</li>
+                </ul>
+                <a href="mailto:hello@nestmind.ai" class="price-btn price-btn-outline">Contact Sales</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA BANNER -->
+    <div class="cta-banner">
+        <h2>Ready to automate your properties?</h2>
+        <p>Join landlords who save 10+ hours per week with NestMind AI</p>
+        <a href="/signup" class="btn-lg btn-filled">Start Free — No Credit Card</a>
+    </div>
+
+    <!-- FAQ -->
+    <section class="section" id="faq">
+        <div class="faq-header">
+            <div class="faq-label">Questions</div>
+            <h2 class="section-title">Everything you need to know</h2>
+        </div>
+        <div class="faq-list">
+            <div class="faq-item">
+                <div class="faq-q" onclick="this.parentElement.classList.toggle('open')">
+                    What do I need to get started?
+                    <span class="arrow">+</span>
+                </div>
+                <div class="faq-a">Just sign up with your email, add your WhatsApp number, and create your first unit.
+                    NestMind AI connects through the Evolution API to handle WhatsApp messages automatically. No special
+                    hardware or software needed.</div>
+            </div>
+            <div class="faq-item">
+                <div class="faq-q" onclick="this.parentElement.classList.toggle('open')">
+                    How does the AI handle tenant messages?
+                    <span class="arrow">+</span>
+                </div>
+                <div class="faq-a">NestMind AI uses an agentic framework powered by Google Gemini. When a tenant
+                    messages, the AI triages the request, classifies severity, checks legal compliance for your
+                    province, and drafts a reply — all in seconds. You can review drafts before they're sent, or enable
+                    autopilot for routine issues.</div>
+            </div>
+            <div class="faq-item">
+                <div class="faq-q" onclick="this.parentElement.classList.toggle('open')">
+                    Is my data secure?
+                    <span class="arrow">+</span>
+                </div>
+                <div class="faq-a">Yes. All data is encrypted in transit and at rest. Multi-tenant architecture ensures
+                    complete isolation between landlords. Utility credentials are encrypted and never exposed to the AI
+                    — only used internally for automated scraping.</div>
+            </div>
+            <div class="faq-item">
+                <div class="faq-q" onclick="this.parentElement.classList.toggle('open')">
+                    Can I control what the AI sends to tenants?
+                    <span class="arrow">+</span>
+                </div>
+                <div class="faq-a">Absolutely. You control the auto-reply toggle, the delay before replies are sent, and
+                    the cooldown between messages. For high-severity issues, the AI always alerts you first and waits
+                    for approval. You can also set it to full autopilot for routine requests.</div>
+            </div>
+            <div class="faq-item">
+                <div class="faq-q" onclick="this.parentElement.classList.toggle('open')">
+                    What provinces/states are supported?
+                    <span class="arrow">+</span>
+                </div>
+                <div class="faq-a">NestMind AI includes legal compliance profiles for 12 jurisdictions: Ontario, British
+                    Columbia, Alberta, Saskatchewan, Manitoba, Quebec, Nova Scotia, New Brunswick, New York, California,
+                    Texas, and the United Kingdom. More are being added regularly.</div>
+            </div>
+            <div class="faq-item">
+                <div class="faq-q" onclick="this.parentElement.classList.toggle('open')">
+                    What if the AI makes a mistake?
+                    <span class="arrow">+</span>
+                </div>
+                <div class="faq-a">Every AI draft goes through legal compliance checks before being sent. For critical
+                    issues, the landlord is always notified first. You can review, edit, or reject any draft from the
+                    dashboard. The AI also logs every step it takes so you can audit its reasoning.</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- FOOTER -->
+    <footer>
+        <div class="footer-inner">
+            <div class="footer-brand">
+                <a href="/" class="nav-logo" style="margin-bottom:8px">
+                    <div class="nav-logo-icon">🏠</div>
+                    <span class="nav-logo-text">NestMind AI</span>
+                </a>
+                <p>AI-powered property management that handles tenant communication, maintenance, utilities, and
+                    compliance — all through WhatsApp.</p>
+            </div>
+            <div class="footer-links">
+                <h4>Product</h4>
+                <a href="#features">Features</a>
+                <a href="#pricing">Pricing</a>
+                <a href="#faq">FAQ</a>
+                <a href="/dashboard">Dashboard</a>
+            </div>
+            <div class="footer-links">
+                <h4>Account</h4>
+                <a href="/login">Login</a>
+                <a href="/signup">Sign Up</a>
+            </div>
+            <div class="footer-links">
+                <h4>Legal</h4>
+                <a href="#">Privacy Policy</a>
+                <a href="#">Terms of Service</a>
+            </div>
+        </div>
+        <div class="footer-bottom">© 2026 NestMind AI. All rights reserved.</div>
+    </footer>
+
+    <script>
+        // Rotating text animation
+        const words = ['Landlords', 'Property Managers', 'Real Estate Investors', 'Building Owners', 'Rental Portfolios'];
+        let wordIndex = 0;
+        const rotatingEl = document.getElementById('rotatingText');
+        setInterval(() => {
+            rotatingEl.style.opacity = '0';
+            rotatingEl.style.transform = 'translateY(10px)';
+            setTimeout(() => {
+                wordIndex = (wordIndex + 1) % words.length;
+                rotatingEl.textContent = words[wordIndex];
+                rotatingEl.style.opacity = '1';
+                rotatingEl.style.transform = 'translateY(0)';
+            }, 300);
+        }, 2500);
+        rotatingEl.style.transition = 'opacity 0.3s, transform 0.3s';
+    </script>
+</body>
+
+</html>

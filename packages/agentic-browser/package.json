@@ -1,0 +1,42 @@
+{
+    "name": "agentic-browser",
+    "version": "1.0.0",
+    "description": "LLM-powered autonomous browser agent with vision, CAPTCHA solving, and goal-driven navigation. TypeScript equivalent of Browser Use.",
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "scripts": {
+        "build": "tsc",
+        "dev": "tsc --watch",
+        "clean": "rimraf dist"
+    },
+    "keywords": [
+        "browser-agent",
+        "llm",
+        "puppeteer",
+        "agentic",
+        "captcha",
+        "web-scraping",
+        "ai-browser",
+        "vision",
+        "autonomous"
+    ],
+    "peerDependencies": {
+        "puppeteer": ">=21.0.0"
+    },
+    "peerDependenciesMeta": {
+        "puppeteer": {
+            "optional": true
+        },
+        "puppeteer-core": {
+            "optional": true
+        }
+    },
+    "license": "MIT",
+    "engines": {
+        "node": ">=18.0.0"
+    },
+    "files": [
+        "dist",
+        "README.md"
+    ]
+}

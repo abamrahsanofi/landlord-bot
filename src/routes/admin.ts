@@ -5,9 +5,23 @@ import { MaintenanceStatus, UtilityType } from "@prisma/client";
 import whatsappService from "../services/whatsappService";
 import agentService from "../services/agentService";
 import { getWebhookStatus } from "../services/webhookStatus";
-import { addReminder, deleteReminder, listReminders } from "../services/reminderService";
+import { addReminder, deleteReminder, listReminders, toggleReminder } from "../services/reminderService";
+import { requireAuth, AuthRequest } from "../middleware/auth";
+import { checkPlanLimit } from "../services/planService";
+import { createCheckoutSession } from "../services/stripeService";
+import { listProvinces } from "../config/rtaProfiles";
+import orchestrator from "../services/agentOrchestrator";
+import { readPage } from "../services/pageReader";
+import conversationMemory from "../services/conversationMemory";
+import { db } from "../config/database";
+import { findExpiringLeases, sendLeaseExpiryAlerts } from "../services/leaseExpiryService";
+import { agentRateLimit } from "../services/rateLimiter";
+import greenButton from "../services/greenButtonService";
 
 const router = express.Router();
+
+// All admin routes require authentication
+router.use(requireAuth);
 
 const tenantSchema = z.object({
   id: z.string().optional(),
@@ -65,12 +79,14 @@ const utilityCredentialSchema = z.object({
   utilityType: z.enum(["INTERNET", "WATER_GAS", "HYDRO"]),
   username: z.string().optional(),
   password: z.string().optional(),
+  url: z.string().optional(),
   notes: z.string().optional(),
 });
 
 const utilityCredentialUpdateSchema = z.object({
   username: z.string().optional(),
   password: z.string().optional(),
+  url: z.string().optional(),
   notes: z.string().optional(),
 });
 
@@ -97,6 +113,7 @@ router.post("/tenants", async (req, res) => {
   if (!process.env.DATABASE_URL) {
     return res.status(503).json({ error: "db_disabled" });
   }
+  const authReq = req as AuthRequest;
   const parsed = tenantSchema.safeParse(req.body || {});
   if (!parsed.success) {
     return res.status(400).json({ error: "validation_failed", details: parsed.error.flatten() });
@@ -113,7 +130,7 @@ router.post("/tenants", async (req, res) => {
     const unit = await repo.getUnitById(parsed.data.unitId);
     if (!unit) return res.status(400).json({ error: "unit_not_found" });
   }
-  const tenant = await repo.createTenant(parsed.data);
+  const tenant = await repo.createTenant({ ...parsed.data, landlordId: authReq.landlordId });
   if (!tenant) return res.status(500).json({ error: "tenant_create_failed" });
   res.json({ tenant });
 });
@@ -133,11 +150,12 @@ router.delete("/tenants/:id", async (req, res) => {
 });
 
 router.post("/contractors", async (req, res) => {
+  const authReq = req as AuthRequest;
   const parsed = contractorSchema.safeParse(req.body || {});
   if (!parsed.success) {
     return res.status(400).json({ error: "validation_failed", details: parsed.error.flatten() });
   }
-  const contractor = await repo.createContractor(parsed.data);
+  const contractor = await repo.createContractor({ ...parsed.data, landlordId: authReq.landlordId });
   res.json({ contractor });
 });
 
@@ -165,22 +183,30 @@ router.patch("/tenants/:id/contact", async (req, res) => {
   res.json({ tenant: updated });
 });
 
-router.get("/tenants", async (_req, res) => {
-  const tenants = await repo.listTenants();
+router.get("/tenants", async (req, res) => {
+  const authReq = req as AuthRequest;
+  const tenants = await repo.listTenants(authReq.landlordId);
   res.json({ items: tenants });
 });
 
-router.get("/contractors", async (_req, res) => {
-  const contractors = await repo.listContractors();
+router.get("/contractors", async (req, res) => {
+  const authReq = req as AuthRequest;
+  const contractors = await repo.listContractors(authReq.landlordId);
   res.json({ items: contractors });
 });
 
 router.post("/units", async (req, res) => {
+  const authReq = req as AuthRequest;
   const parsed = unitSchema.safeParse(req.body || {});
   if (!parsed.success) {
     return res.status(400).json({ error: "validation_failed", details: parsed.error.flatten() });
   }
-  const unit = await repo.createUnit(parsed.data);
+  // Check plan limit
+  const limit = await checkPlanLimit(authReq.landlordId, "units");
+  if (!limit.allowed) {
+    return res.status(403).json({ error: "plan_limit_reached", message: `Your ${limit.plan} plan allows ${limit.max} units. You have ${limit.current}.`, current: limit.current, max: limit.max });
+  }
+  const unit = await repo.createUnit({ ...parsed.data, landlordId: authReq.landlordId });
   res.json({ unit });
 });
 
@@ -198,8 +224,9 @@ router.delete("/units/:id", async (req, res) => {
   res.json({ deleted: true });
 });
 
-router.get("/units", async (_req, res) => {
-  const units = await repo.listUnits();
+router.get("/units", async (req, res) => {
+  const authReq = req as AuthRequest;
+  const units = await repo.listUnits(authReq.landlordId);
   res.json({ items: units });
 });
 
@@ -224,6 +251,482 @@ router.delete("/utilities/credentials/:id", async (req, res) => {
   const credential = await repo.deleteUtilityCredential({ id: req.params.id });
   if (!credential) return res.status(404).json({ error: "not_found" });
   res.json({ deleted: true });
+});
+
+/** Fetch bill using saved credential — LLM-driven agentic browser for multi-step logins */
+router.post("/utilities/credentials/:id/fetch-bill", async (req, res) => {
+  const authReq = req as unknown as AuthRequest;
+  try {
+    // 1. Load credential
+    const cred = await db.utilityCredential.findUnique({ where: { id: req.params.id } });
+    if (!cred) return res.status(404).json({ error: "Credential not found" });
+
+    // 2. Decrypt password
+    const password = await repo.getDecryptedUtilityPassword(cred.id);
+    if (!cred.username || !password) {
+      return res.status(400).json({ error: "Credential missing username or password. Please update it." });
+    }
+
+    const loginUrl = cred.url || "";
+    if (!loginUrl) {
+      return res.status(400).json({ error: "No portal URL saved. Edit the credential and add the login URL." });
+    }
+
+    // 3. Try undetected-chromedriver (Python) first — best bot-detection bypass
+    //    Falls back to agentic browser, then simple Puppeteer
+    try {
+      const { execFile } = require("child_process");
+      const path = require("path");
+      const scriptPath = path.join(__dirname, "../../scripts/fetchBill.py");
+
+      // Check if the script exists
+      const fs = require("fs");
+      if (fs.existsSync(scriptPath)) {
+        const ucResult: any = await new Promise((resolve, reject) => {
+          const child = execFile(
+            "python",
+            [scriptPath, "--url", loginUrl, "--stdin", "--timeout", "300", "--debug"],
+            { timeout: 600000, maxBuffer: 20 * 1024 * 1024 },
+            (err: any, stdout: string, stderr: string) => {
+              if (stderr) console.log("[FetchBill/UC] stderr:", stderr); // eslint-disable-line no-console
+              if (err && !stdout) return reject(err);
+              try {
+                resolve(JSON.parse(stdout));
+              } catch (parseErr) {
+                reject(new Error(`Failed to parse Python output: ${stdout?.slice(0, 500)}`));
+              }
+            },
+          );
+          // Send credentials + Gemini key + notes via stdin (more secure than command args)
+          const geminiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || "";
+          child.stdin?.write(JSON.stringify({ username: cred.username, password, geminiKey, notes: cred.notes || "" }));
+          child.stdin?.end();
+        });
+
+        if (ucResult) {
+          // Check if 2FA is required
+          if (ucResult.needs2fa) {
+            return res.json({
+              ok: false,
+              needs2fa: true,
+              mode: "undetected-chrome",
+              utilityType: cred.utilityType,
+              unitId: cred.unitId,
+              credentialId: cred.id,
+              tfaChannel: ucResult.tfaChannel || "Unknown",
+              sessionFile: ucResult.sessionFile || "",
+              screenshot: ucResult.screenshot || undefined,
+              pageText: (ucResult.pageText || "").slice(0, 4000),
+              pageTitle: ucResult.pageTitle || "",
+              url: ucResult.url || loginUrl,
+              stepsUsed: ucResult.steps?.length || 0,
+              stepSummary: ucResult.steps || [],
+              note: ucResult.note || "2FA verification required. Enter the code sent to your device.",
+            });
+          }
+
+          // ── Auto-save bill to database if billing data was extracted ──
+          let savedBill: any = null;
+          if (ucResult.ok && ucResult.billingData) {
+            const bd = ucResult.billingData;
+            const amountStr = bd.totalAmountDue || bd.allAmounts?.[0] || "";
+            const amountNum = parseFloat(String(amountStr).replace(/[$,]/g, ""));
+            if (!isNaN(amountNum) && amountNum > 0) {
+              try {
+                savedBill = await repo.createUtilityBill({
+                  unitId: cred.unitId || undefined,
+                  utilityType: cred.utilityType,
+                  amountCents: Math.round(amountNum * 100),
+                  currency: "CAD",
+                  billingPeriodStart: bd.billingPeriod ? new Date() : undefined,
+                  billingPeriodEnd: bd.dueDate ? new Date(bd.dueDate) : undefined,
+                  portalUsername: cred.username || undefined,
+                  rawData: ucResult.billingData,
+                });
+                console.log(`[FetchBill] Auto-saved bill: $${amountNum} for ${cred.utilityType}`); // eslint-disable-line no-console
+              } catch (billErr) {
+                console.warn("[FetchBill] Failed to auto-save bill:", (billErr as Error).message); // eslint-disable-line no-console
+              }
+            }
+          }
+
+          return res.json({
+            ok: ucResult.ok,
+            mode: "undetected-chrome",
+            utilityType: cred.utilityType,
+            unitId: cred.unitId,
+            pageTitle: ucResult.pageTitle || "",
+            url: ucResult.url || loginUrl,
+            amountsFound: ucResult.amountsFound || [],
+            datesFound: ucResult.datesFound || [],
+            billingData: ucResult.billingData || undefined,
+            savedBill: savedBill || undefined,
+            pageText: (ucResult.pageText || "").slice(0, 8000),
+            screenshot: ucResult.screenshot || undefined,
+            stepsUsed: ucResult.steps?.length || 0,
+            error: ucResult.error,
+            stepSummary: ucResult.steps || [],
+            note: ucResult.ok
+              ? (savedBill
+                  ? `Bill of $${(savedBill.amountCents / 100).toFixed(2)} auto-saved to utilities.`
+                  : "Undetected Chrome successfully navigated the portal. Review the data and create a bill from the Bills tab.")
+              : `Undetected Chrome could not complete login. ${ucResult.error || "Check step details."}`,
+          });
+        }
+      }
+    } catch (ucErr) {
+      const ucErrMsg = (ucErr as Error).message || "";
+      console.warn("[FetchBill] Undetected-chromedriver failed, falling back:", ucErrMsg); // eslint-disable-line no-console
+
+      // Don't retry with other methods if credentials are wrong
+      if (ucErrMsg.includes("Login failed") || ucErrMsg.includes("credentials") || ucErrMsg.includes("Invalid")) {
+        return res.json({
+          ok: false,
+          mode: "undetected-chrome",
+          utilityType: cred.utilityType,
+          unitId: cred.unitId,
+          error: "Login failed: credentials may be incorrect. Please update the username/password.",
+          stepSummary: [],
+          note: "Login credentials appear to be incorrect. Please edit the credential and update the username/password.",
+        });
+      }
+    }
+
+    // 4. Try agentic browser (LLM-powered), fall back to simple Puppeteer
+    const { vertexAI, defaultModel } = require("../config/gemini");
+
+    if (vertexAI) {
+      // ── AGENTIC BROWSER MODE — handles multi-step logins, CAPTCHAs, etc. ──
+      try {
+        const { AgenticNavigator, createGeminiProvider } = require("../../packages/agentic-browser/src");
+        const model = vertexAI.getGenerativeModel({ model: defaultModel });
+        const llm = createGeminiProvider(model);
+
+        const navigator = new AgenticNavigator({
+          llm,
+          headless: true,
+          debug: process.env.AGENTIC_BROWSER_DEBUG === "true",
+          timeout: 45000,
+          captcha: {
+            provider: (process.env.CAPTCHA_PROVIDER as any) || "none",
+            apiKey: process.env.CAPTCHA_API_KEY || undefined,
+            useLLMVision: true,
+          },
+        });
+
+        const utilityLabel = cred.utilityType === "INTERNET" ? "internet/telecom"
+          : cred.utilityType === "WATER_GAS" ? "water/gas"
+            : "hydro/electricity";
+
+        const result = await navigator.run({
+          goal: `Log into this ${utilityLabel} provider portal and find the latest bill. Extract: the total amount owing/due, the billing period or statement date, and any usage data shown. If there is an account overview or billing summary page, navigate to it. Report all dollar amounts and dates you find.`,
+          startUrl: loginUrl,
+          credentials: { username: cred.username, password },
+          maxSteps: 20,
+        });
+
+        // Build response
+        const extractedAmounts: string[] = [];
+        const extractedDates: string[] = [];
+        let pageText = "";
+
+        // Parse extracted data from the LLM
+        if (result.extractedData) {
+          const data = typeof result.extractedData === "string" ? result.extractedData : JSON.stringify(result.extractedData, null, 2);
+          pageText = data;
+          // Extract dollar amounts
+          const amountMatches = data.match(/\$[\d,]+\.?\d{0,2}/g) || [];
+          extractedAmounts.push(...amountMatches);
+          // Extract dates
+          const dateMatches = data.match(/\b(?:\w+ \d{1,2},?\s*\d{4}|\d{1,2}[/-]\d{1,2}[/-]\d{2,4})\b/g) || [];
+          extractedDates.push(...dateMatches);
+        }
+
+        // Get the final screenshot
+        const lastStepWithScreenshot = [...result.steps].reverse().find((s: any) => s.screenshot);
+        const screenshot = result.finalScreenshot || lastStepWithScreenshot?.screenshot;
+
+        return res.json({
+          ok: result.success,
+          mode: "agentic",
+          utilityType: cred.utilityType,
+          unitId: cred.unitId,
+          pageTitle: result.steps?.[result.steps.length - 1]?.pageTitle || "",
+          url: result.finalUrl || loginUrl,
+          amountsFound: extractedAmounts.slice(0, 20),
+          datesFound: extractedDates.slice(0, 20),
+          extractedData: result.extractedData,
+          pageText: pageText.slice(0, 8000),
+          screenshot: screenshot ? `data:image/png;base64,${screenshot}` : undefined,
+          stepsUsed: result.steps?.length || 0,
+          totalTimeMs: result.totalTimeMs,
+          error: result.error,
+          stepSummary: (result.steps || []).map((s: any) => ({
+            step: s.stepNumber,
+            action: s.action?.type,
+            description: s.action?.description || s.action?.result || s.action?.reason,
+          })),
+          note: result.success
+            ? "AI agent successfully navigated the portal. Review the extracted data and create a bill from the Bills tab."
+            : "AI agent could not complete the task. Check the step summary for details.",
+        });
+      } catch (agenticErr) {
+        console.warn("[FetchBill] Agentic browser failed, falling back to simple scraper:", (agenticErr as Error).message); // eslint-disable-line no-console
+        // Fall through to simple Puppeteer below
+      }
+    }
+
+    // ── SIMPLE PUPPETEER FALLBACK — for when Gemini is not configured ──
+    let puppeteer: any;
+    try {
+      const pExtra = require("puppeteer-extra");
+      const StealthPlugin = require("puppeteer-extra-plugin-stealth");
+      pExtra.use(StealthPlugin());
+      puppeteer = pExtra;
+    } catch {
+      try {
+        puppeteer = require("puppeteer");
+      } catch {
+        try { puppeteer = require("puppeteer-core"); } catch {
+          return res.status(500).json({ error: "Puppeteer not installed on server." });
+        }
+      }
+    }
+
+    const browser = await puppeteer.launch({
+      headless: "new",
+      args: [
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage",
+        "--disable-blink-features=AutomationControlled",
+        "--disable-infobars",
+        "--window-size=1280,800",
+        "--lang=en-US,en",
+      ],
+    });
+
+    const page = await browser.newPage();
+    try {
+      await page.setViewport({ width: 1280, height: 800 });
+      await page.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36");
+
+      // Extra anti-bot evasion
+      await page.evaluateOnNewDocument(() => {
+        Object.defineProperty(navigator, "webdriver", { get: () => false });
+        // @ts-ignore
+        window.chrome = { runtime: { onMessage: { addListener: () => { }, removeListener: () => { } }, sendMessage: () => { } }, loadTimes: () => { }, csi: () => { } };
+        Object.defineProperty(navigator, "plugins", { get: () => [{ name: "Chrome PDF Plugin" }, { name: "Chrome PDF Viewer" }, { name: "Native Client" }] });
+        Object.defineProperty(navigator, "languages", { get: () => ["en-US", "en"] });
+      });
+
+      await page.goto(loginUrl, { waitUntil: "networkidle2", timeout: 30000 });
+      // Small human delay after page loads
+      await new Promise(r => setTimeout(r, 1500 + Math.random() * 1500));
+
+      // Try to find and fill login — handle multi-step forms
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const fields = await page.evaluate(() => {
+          const userFields = document.querySelectorAll(
+            'input[type="text"], input[type="email"], input[name*="user"], input[name*="email"], input[id*="user"], input[id*="email"], input[name*="login"], input[id*="login"]'
+          );
+          const passFields = document.querySelectorAll('input[type="password"]');
+          return {
+            hasUsername: userFields.length > 0,
+            hasPassword: passFields.length > 0,
+            userSelector: userFields.length > 0 ? `input[type="${(userFields[0] as any).type}"]` : null,
+            pageTitle: document.title,
+          };
+        });
+
+        // Step 1: Fill username if visible and no password yet (multi-step)
+        if (fields.hasUsername && !fields.hasPassword) {
+          await page.click(fields.userSelector!);
+          await new Promise(r => setTimeout(r, 300 + Math.random() * 400));
+          await page.type(fields.userSelector!, cred.username, { delay: 50 + Math.random() * 80 });
+          await new Promise(r => setTimeout(r, 800 + Math.random() * 800));
+          // Click Continue/Next/Submit button
+          const continueBtn = await page.$('button[type="submit"], button:not([type]), input[type="submit"]');
+          if (continueBtn) { await continueBtn.click(); }
+          else { await page.keyboard.press("Enter"); }
+          await page.waitForNavigation({ waitUntil: "networkidle2", timeout: 15000 }).catch(() => { });
+          await new Promise(r => setTimeout(r, 3000 + Math.random() * 2000));
+          continue;
+        }
+
+        // Step 2: Fill password if visible
+        if (fields.hasPassword) {
+          // If username field is still visible (single-step login), fill it too
+          if (fields.hasUsername) {
+            const usernameEmpty = await page.evaluate((sel: string) => {
+              const el = document.querySelector(sel) as HTMLInputElement;
+              return el ? !el.value : true;
+            }, fields.userSelector!);
+            if (usernameEmpty) {
+              await page.click(fields.userSelector!);
+              await page.type(fields.userSelector!, cred.username, { delay: 30 });
+            }
+          }
+          await page.click("input[type='password']");
+          await new Promise(r => setTimeout(r, 300 + Math.random() * 400));
+          await page.type("input[type='password']", password, { delay: 50 + Math.random() * 80 });
+          await new Promise(r => setTimeout(r, 800 + Math.random() * 800));
+          const submitBtn = await page.$('button[type="submit"], input[type="submit"]');
+          if (submitBtn) { await submitBtn.click(); } else { await page.keyboard.press("Enter"); }
+          await page.waitForNavigation({ waitUntil: "networkidle2", timeout: 20000 }).catch(() => { });
+          break;
+        }
+
+        // Neither field found — break
+        break;
+      }
+
+      // Extract billing data
+      const billingData = await page.evaluate(() => {
+        const text = document.body?.innerText || "";
+        const amounts = text.match(/\$[\d,]+\.?\d{0,2}/g) || [];
+        const dates = text.match(/\b(?:\w+ \d{1,2},?\s*\d{4}|\d{1,2}[/-]\d{1,2}[/-]\d{2,4})\b/g) || [];
+        return {
+          pageText: text.slice(0, 8000),
+          pageTitle: document.title,
+          amountsFound: amounts.slice(0, 20),
+          datesFound: dates.slice(0, 20),
+          url: window.location.href,
+        };
+      });
+
+      const screenshot = await page.screenshot({ encoding: "base64", type: "png" });
+
+      res.json({
+        ok: true,
+        mode: "simple",
+        utilityType: cred.utilityType,
+        unitId: cred.unitId,
+        ...billingData,
+        screenshot: `data:image/png;base64,${screenshot}`,
+        note: "Review the scraped data. If amounts are correct, you can manually create a bill from the Bills tab.",
+      });
+    } finally {
+      await page.close();
+      await browser.close();
+    }
+  } catch (err) {
+    res.status(500).json({ error: `Fetch failed: ${(err as Error).message}` });
+  }
+});
+
+// ── 2FA Resume endpoint — send verification code to complete login ──
+router.post("/utilities/credentials/:id/fetch-bill-2fa", async (req, res) => {
+  try {
+    const { code, sessionFile } = req.body || {};
+    if (!code || !sessionFile) {
+      return res.status(400).json({ error: "Verification code and sessionFile are required" });
+    }
+
+    const cred = await db.utilityCredential.findUnique({ where: { id: req.params.id } });
+    if (!cred) return res.status(404).json({ error: "Credential not found" });
+
+    const loginUrl = cred.url || "";
+    if (!loginUrl) {
+      return res.status(400).json({ error: "No portal URL saved." });
+    }
+
+    const { execFile } = require("child_process");
+    const path = require("path");
+    const fs = require("fs");
+    const scriptPath = path.join(__dirname, "../../scripts/fetchBill.py");
+
+    if (!fs.existsSync(scriptPath)) {
+      return res.status(500).json({ error: "fetchBill.py script not found" });
+    }
+
+    // Verify session file exists
+    if (!fs.existsSync(sessionFile)) {
+      return res.status(400).json({ error: "Session expired or file not found. Please re-fetch the bill." });
+    }
+
+    const ucResult: any = await new Promise((resolve, reject) => {
+      const child = execFile(
+        "python",
+        [
+          scriptPath,
+          "--url", loginUrl,
+          "--resume",
+          "--session-file", sessionFile,
+          "--stdin",
+          "--timeout", "300",
+          "--debug",
+        ],
+        { timeout: 600000, maxBuffer: 20 * 1024 * 1024 },
+        (err: any, stdout: string, stderr: string) => {
+          if (stderr) console.log("[FetchBill/2FA] stderr:", stderr); // eslint-disable-line no-console
+          if (err && !stdout) return reject(err);
+          try {
+            resolve(JSON.parse(stdout));
+          } catch (parseErr) {
+            reject(new Error(`Failed to parse Python output: ${stdout?.slice(0, 500)}`));
+          }
+        },
+      );
+      // Send the verification code + Gemini key + notes via stdin
+      const geminiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || "";
+      child.stdin?.write(JSON.stringify({ code: String(code), geminiKey, notes: cred.notes || "" }));
+      child.stdin?.end();
+    });
+
+    // Clean up session file
+    try { fs.unlinkSync(sessionFile); } catch { }
+
+    // ── Auto-save bill to database if billing data was extracted after 2FA ──
+    let savedBill: any = null;
+    if (ucResult.ok && ucResult.billingData) {
+      const bd = ucResult.billingData;
+      const amountStr = bd.totalAmountDue || bd.allAmounts?.[0] || "";
+      const amountNum = parseFloat(String(amountStr).replace(/[$,]/g, ""));
+      if (!isNaN(amountNum) && amountNum > 0) {
+        try {
+          savedBill = await repo.createUtilityBill({
+            unitId: cred.unitId || undefined,
+            utilityType: cred.utilityType,
+            amountCents: Math.round(amountNum * 100),
+            currency: "CAD",
+            billingPeriodStart: bd.billingPeriod ? new Date() : undefined,
+            billingPeriodEnd: bd.dueDate ? new Date(bd.dueDate) : undefined,
+            portalUsername: cred.username || undefined,
+            rawData: ucResult.billingData,
+          });
+          console.log(`[FetchBill/2FA] Auto-saved bill: $${amountNum} for ${cred.utilityType}`); // eslint-disable-line no-console
+        } catch (billErr) {
+          console.warn("[FetchBill/2FA] Failed to auto-save bill:", (billErr as Error).message); // eslint-disable-line no-console
+        }
+      }
+    }
+
+    return res.json({
+      ok: ucResult.ok,
+      mode: "undetected-chrome",
+      utilityType: cred.utilityType,
+      unitId: cred.unitId,
+      pageTitle: ucResult.pageTitle || "",
+      url: ucResult.url || loginUrl,
+      amountsFound: ucResult.amountsFound || [],
+      datesFound: ucResult.datesFound || [],
+      billingData: ucResult.billingData || undefined,
+      savedBill: savedBill || undefined,
+      pageText: (ucResult.pageText || "").slice(0, 8000),
+      screenshot: ucResult.screenshot || undefined,
+      stepsUsed: ucResult.steps?.length || 0,
+      error: ucResult.error,
+      stepSummary: ucResult.steps || [],
+      note: ucResult.ok
+        ? (savedBill
+            ? `2FA verification successful! Bill of $${(savedBill.amountCents / 100).toFixed(2)} auto-saved to utilities.`
+            : "2FA verification successful! Review the data and create a bill from the Bills tab.")
+        : `2FA verification completed but could not extract bill data. ${ucResult.error || "Check step details."}`,
+    });
+  } catch (err) {
+    res.status(500).json({ error: `2FA verification failed: ${(err as Error).message}` });
+  }
 });
 
 router.get("/utilities/credentials", async (req, res) => {
@@ -281,15 +784,17 @@ router.post("/whatsapp/test", async (req, res) => {
   res.json({ ok: true, response: result.response });
 });
 
-router.get("/landlord-numbers", (_req, res) => {
-  const raw = process.env.LANDLORD_WHATSAPP_NUMBERS || "";
-  res.json({ raw, numbers: raw.split(",").map((v: string) => v.trim()).filter(Boolean) });
+router.get("/landlord-numbers", (req, res) => {
+  const authReq = req as AuthRequest;
+  res.json({ numbers: authReq.landlord.whatsappNumbers });
 });
 
-router.post("/landlord-numbers", (req, res) => {
-  const raw = typeof req.body?.numbers === "string" ? req.body.numbers : "";
-  process.env.LANDLORD_WHATSAPP_NUMBERS = raw;
-  res.json({ raw, numbers: raw.split(",").map((v: string) => v.trim()).filter(Boolean) });
+router.post("/landlord-numbers", async (req, res) => {
+  const authReq = req as AuthRequest;
+  const numbers = Array.isArray(req.body?.numbers) ? req.body.numbers : typeof req.body?.numbers === "string" ? req.body.numbers.split(",").map((v: string) => v.trim()).filter(Boolean) : [];
+  const { db } = require("../config/database");
+  await db.landlord.update({ where: { id: authReq.landlordId }, data: { whatsappNumbers: numbers } });
+  res.json({ numbers });
 });
 
 const statusSchema = z.object({
@@ -312,44 +817,50 @@ router.delete("/maintenance/:id", async (req, res) => {
   res.json({ deleted: true });
 });
 
-router.get("/auto-reply", async (_req, res) => {
-  const setting = await repo.getGlobalAutoReplyEnabled();
+router.get("/auto-reply", async (req, res) => {
+  const authReq = req as AuthRequest;
+  const setting = await repo.getGlobalAutoReplyEnabled(authReq.landlordId);
   res.json({ enabled: setting.enabled, source: setting.source });
 });
 
-router.get("/auto-reply-delay", async (_req, res) => {
-  const setting = await repo.getGlobalAutoReplyDelayMinutes();
+router.get("/auto-reply-delay", async (req, res) => {
+  const authReq = req as AuthRequest;
+  const setting = await repo.getGlobalAutoReplyDelayMinutes(authReq.landlordId);
   res.json({ minutes: setting.minutes, source: setting.source });
 });
 
-router.get("/auto-reply-cooldown", async (_req, res) => {
-  const setting = await repo.getGlobalAutoReplyCooldownMinutes();
+router.get("/auto-reply-cooldown", async (req, res) => {
+  const authReq = req as AuthRequest;
+  const setting = await repo.getGlobalAutoReplyCooldownMinutes(authReq.landlordId);
   res.json({ minutes: setting.minutes, source: setting.source });
 });
 
 router.patch("/auto-reply", async (req, res) => {
+  const authReq = req as AuthRequest;
   const schema = z.object({ enabled: z.boolean() });
   const parsed = schema.safeParse(req.body || {});
   if (!parsed.success) return res.status(400).json({ error: "validation_failed", details: parsed.error.flatten() });
-  const updated = await repo.setGlobalAutoReplyEnabled({ enabled: parsed.data.enabled });
+  const updated = await repo.setGlobalAutoReplyEnabled({ enabled: parsed.data.enabled, landlordId: authReq.landlordId });
   if (!updated) return res.status(500).json({ error: "auto_reply_update_failed" });
   res.json({ enabled: parsed.data.enabled });
 });
 
 router.patch("/auto-reply-delay", async (req, res) => {
+  const authReq = req as AuthRequest;
   const schema = z.object({ minutes: z.number().min(0).max(120) });
   const parsed = schema.safeParse(req.body || {});
   if (!parsed.success) return res.status(400).json({ error: "validation_failed", details: parsed.error.flatten() });
-  const updated = await repo.setGlobalAutoReplyDelayMinutes({ minutes: parsed.data.minutes });
+  const updated = await repo.setGlobalAutoReplyDelayMinutes({ minutes: parsed.data.minutes, landlordId: authReq.landlordId });
   if (!updated) return res.status(500).json({ error: "auto_reply_delay_update_failed" });
   res.json({ minutes: parsed.data.minutes });
 });
 
 router.patch("/auto-reply-cooldown", async (req, res) => {
+  const authReq = req as AuthRequest;
   const schema = z.object({ minutes: z.number().min(0).max(240) });
   const parsed = schema.safeParse(req.body || {});
   if (!parsed.success) return res.status(400).json({ error: "validation_failed", details: parsed.error.flatten() });
-  const updated = await repo.setGlobalAutoReplyCooldownMinutes({ minutes: parsed.data.minutes });
+  const updated = await repo.setGlobalAutoReplyCooldownMinutes({ minutes: parsed.data.minutes, landlordId: authReq.landlordId });
   if (!updated) return res.status(500).json({ error: "auto_reply_cooldown_update_failed" });
   res.json({ minutes: parsed.data.minutes });
 });
@@ -371,11 +882,13 @@ router.get("/webhook-status", (_req, res) => {
   res.json({ status: getWebhookStatus() });
 });
 
-router.get("/reminders", (_req, res) => {
-  res.json({ items: listReminders() });
+router.get("/reminders", async (req, res) => {
+  const authReq = req as AuthRequest;
+  const items = await listReminders(authReq.landlordId);
+  res.json({ items });
 });
 
-router.post("/reminders", (req, res) => {
+router.post("/reminders", async (req, res) => {
   const schema = z.object({
     type: z.enum(["rent", "utility"]),
     dayOfMonth: z.number().min(1).max(28),
@@ -384,14 +897,23 @@ router.post("/reminders", (req, res) => {
   });
   const parsed = schema.safeParse(req.body || {});
   if (!parsed.success) return res.status(400).json({ error: "validation_failed", details: parsed.error.flatten() });
-  const reminder = addReminder({ id: `rem-${Date.now()}`, ...parsed.data });
+  const authReq = req as AuthRequest;
+  const reminder = await addReminder({ id: `rem-${Date.now()}`, landlordId: authReq.landlordId, ...parsed.data });
   res.json({ reminder });
 });
 
-router.delete("/reminders/:id", (req, res) => {
-  const deleted = deleteReminder(req.params.id);
+router.delete("/reminders/:id", async (req, res) => {
+  const deleted = await deleteReminder(req.params.id);
   if (!deleted) return res.status(404).json({ error: "not_found" });
   res.json({ deleted: true });
+});
+
+router.patch("/reminders/:id", async (req, res) => {
+  const active = typeof req.body?.active === "boolean" ? req.body.active : undefined;
+  if (active === undefined) return res.status(400).json({ error: "missing_active_flag" });
+  const updated = await toggleReminder(req.params.id, active);
+  if (!updated) return res.status(404).json({ error: "not_found" });
+  res.json({ reminder: updated });
 });
 
 router.post("/utilities/bills/:id/send-whatsapp", async (req, res) => {
@@ -403,6 +925,568 @@ router.post("/utilities/bills/:id/send-whatsapp", async (req, res) => {
   const sent = await whatsappService.sendWhatsAppText({ to: number, text: payloadText, session: req.body?.session });
   if (!sent.ok) return res.status(400).json({ error: sent.error || "send_failed", response: sent.response });
   res.json({ ok: true, response: sent.response });
+});
+
+// ── Billing / Plans ─────────────────────────────────────
+
+router.post("/billing/checkout", async (req, res) => {
+  const authReq = req as AuthRequest;
+  const schema = z.object({ plan: z.enum(["PRO", "ENTERPRISE"]) });
+  const parsed = schema.safeParse(req.body || {});
+  if (!parsed.success) return res.status(400).json({ error: "validation_failed", details: parsed.error.flatten() });
+  const result = await createCheckoutSession(authReq.landlordId, parsed.data.plan);
+  if (result.error) return res.status(400).json(result);
+  res.json({ url: result.url });
+});
+
+router.get("/billing/plans", (_req, res) => {
+  const { PLANS } = require("../services/planService");
+  res.json({ plans: PLANS });
+});
+
+// ── Province / RTA ──────────────────────────────────────
+
+router.get("/provinces", (_req, res) => {
+  res.json({ provinces: listProvinces() });
+});
+
+// ═══════════════════════════════════════════════════════════
+//  AGENTIC ENDPOINTS — Tool-use agent loops
+// ═══════════════════════════════════════════════════════════
+
+/** Ask the landlord assistant agent a question (tool-use loop) */
+router.post("/agent/ask", async (req, res) => {
+  const authReq = req as AuthRequest;
+  const schema = z.object({
+    question: z.string().min(1),
+    maintenanceId: z.string().optional(),
+  });
+  const parsed = schema.safeParse(req.body || {});
+  if (!parsed.success) return res.status(400).json({ error: "validation_failed", details: parsed.error.flatten() });
+
+  try {
+    const result = await orchestrator.landlordAssistantAgent({
+      landlordId: authReq.landlordId,
+      question: parsed.data.question,
+      maintenanceId: parsed.data.maintenanceId,
+    });
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+/** Run the utility bill scraper agent */
+router.post("/agent/utility-check", async (req, res) => {
+  const authReq = req as AuthRequest;
+  const schema = z.object({
+    unitId: z.string().min(1),
+    utilityType: z.string().optional(),
+  });
+  const parsed = schema.safeParse(req.body || {});
+  if (!parsed.success) return res.status(400).json({ error: "validation_failed", details: parsed.error.flatten() });
+
+  try {
+    const result = await orchestrator.runUtilityBillAgent({
+      landlordId: authReq.landlordId,
+      unitId: parsed.data.unitId,
+      utilityType: parsed.data.utilityType,
+    });
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+/** Utility chat — conversational utility assistant */
+router.post("/agent/utility-chat", async (req, res) => {
+  const authReq = req as AuthRequest;
+  const schema = z.object({
+    question: z.string().min(1),
+    unitId: z.string().optional(),
+    utilityType: z.string().optional(),
+  });
+  const parsed = schema.safeParse(req.body || {});
+  if (!parsed.success) return res.status(400).json({ error: "validation_failed", details: parsed.error.flatten() });
+
+  try {
+    const context: string[] = [];
+    if (parsed.data.unitId) context.push(`Unit ID: ${parsed.data.unitId}`);
+    if (parsed.data.utilityType) context.push(`Utility type: ${parsed.data.utilityType}`);
+
+    const userMessage = context.length
+      ? `[Context: ${context.join(", ")}]\n\n${parsed.data.question}`
+      : parsed.data.question;
+
+    const result = await orchestrator.landlordAssistantAgent({
+      landlordId: authReq.landlordId,
+      question: userMessage,
+    });
+    res.json({ answer: result.finalAnswer, steps: result.steps.length, toolCalls: result.toolCallCount });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+/** Read and summarize a webpage (mobile browser) */
+router.post("/agent/read-page", async (req, res) => {
+  const authReq = req as AuthRequest;
+  const schema = z.object({
+    url: z.string().url(),
+    question: z.string().optional(),
+    summarize: z.boolean().optional(),
+    mobile: z.boolean().optional(),
+  });
+  const parsed = schema.safeParse(req.body || {});
+  if (!parsed.success) return res.status(400).json({ error: "validation_failed", details: parsed.error.flatten() });
+
+  try {
+    if (parsed.data.summarize !== false) {
+      // Use the agent loop for intelligent page reading
+      const result = await orchestrator.readPageAgent({
+        url: parsed.data.url,
+        question: parsed.data.question,
+        landlordId: authReq.landlordId,
+      });
+      return res.json(result);
+    }
+
+    // Raw page read (no AI)
+    const page = await readPage(parsed.data.url, { mobile: parsed.data.mobile });
+    res.json(page);
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+/** Standalone web search — search the web for manuals, guides, product info */
+router.post("/agent/web-search", agentRateLimit, async (req, res) => {
+  const schema = z.object({
+    query: z.string().min(1),
+  });
+  const parsed = schema.safeParse(req.body || {});
+  if (!parsed.success) return res.status(400).json({ error: "validation_failed", details: parsed.error.flatten() });
+
+  try {
+    const authReq = req as AuthRequest;
+    const landlord = await repo.getLandlordById(authReq.landlordId);
+    const plan = (landlord?.plan || "FREE") as "FREE" | "PRO" | "ENTERPRISE";
+    const registry = orchestrator.buildToolRegistry(plan);
+    const searchTool = registry.get("web_search");
+    if (!searchTool) return res.status(400).json({ error: "web_search tool not available" });
+
+    const result = await searchTool.execute({ query: parsed.data.query });
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+/** List available tools for the current plan */
+router.get("/agent/tools", async (req, res) => {
+  const authReq = req as AuthRequest;
+  const landlord = await repo.getLandlordById(authReq.landlordId);
+  const plan = (landlord?.plan || "FREE") as "FREE" | "PRO" | "ENTERPRISE";
+  const registry = orchestrator.buildToolRegistry(plan);
+  const tools = registry.listEnabled().map(t => ({
+    name: t.name,
+    description: t.description,
+    category: t.category,
+    parameters: t.parameters,
+  }));
+  res.json({ plan, tools });
+});
+
+// ═══════════════════════════════════════════════════════════
+//  CONVERSATION HISTORY
+// ═══════════════════════════════════════════════════════════
+
+/** Get conversation history for a phone number */
+router.get("/conversations/:phone", async (req: any, res) => {
+  const authReq = req as AuthRequest;
+  const limit = Number(req.query.limit) || 30;
+  const messages = await conversationMemory.getHistory({
+    phone: req.params.phone,
+    landlordId: authReq.landlordId,
+    limit,
+  });
+  res.json({ phone: req.params.phone, messages, count: messages.length });
+});
+
+// ═══════════════════════════════════════════════════════════
+//  AGENT USAGE / TOKEN TRACKING
+// ═══════════════════════════════════════════════════════════
+
+/** Get agent usage stats for the current landlord */
+router.get("/agent/usage", async (req, res) => {
+  const authReq = req as AuthRequest;
+  const days = Number(req.query.days) || 30;
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+  try {
+    const usage = await db.agentUsage.findMany({
+      where: {
+        landlordId: authReq.landlordId,
+        createdAt: { gte: since },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 500,
+    });
+
+    const summary = {
+      totalCalls: usage.length,
+      totalTokens: usage.reduce((sum: number, u: any) => sum + u.totalTokens, 0),
+      totalToolCalls: usage.reduce((sum: number, u: any) => sum + u.toolCalls, 0),
+      avgDurationMs: usage.length ? Math.round(usage.reduce((sum: number, u: any) => sum + u.durationMs, 0) / usage.length) : 0,
+      byTaskType: {} as Record<string, { calls: number; tokens: number }>,
+    };
+
+    for (const u of usage) {
+      const tt = u.taskType || "unknown";
+      if (!summary.byTaskType[tt]) summary.byTaskType[tt] = { calls: 0, tokens: 0 };
+      summary.byTaskType[tt].calls++;
+      summary.byTaskType[tt].tokens += u.totalTokens;
+    }
+
+    res.json({ days, since: since.toISOString(), summary, recent: usage.slice(0, 20) });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════
+//  LEASE EXPIRY MANAGEMENT
+// ═══════════════════════════════════════════════════════════
+
+/** Get leases expiring soon */
+router.get("/leases/expiring", async (req, res) => {
+  const days = Number(req.query.days) || 60;
+  try {
+    const authReq = req as AuthRequest;
+    const allLeases = await findExpiringLeases(days);
+    // Filter to only this landlord's leases
+    const leases = allLeases.filter((l) => l.landlordId === authReq.landlordId);
+    res.json({ leases, count: leases.length, daysAhead: days });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+/** Manually trigger lease expiry alerts */
+router.post("/leases/send-alerts", async (req, res) => {
+  try {
+    const sent = await sendLeaseExpiryAlerts();
+    res.json({ ok: true, alertsSent: sent });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════
+//  GREEN BUTTON — Utility Data Integration
+// ═══════════════════════════════════════════════════════════
+
+/** List available Green Button providers across Ontario */
+router.get("/green-button/providers", (_req, res) => {
+  const providers = greenButton.GTA_PROVIDERS.map((p) => ({
+    id: p.id,
+    name: p.name,
+    shortName: p.shortName,
+    utilityType: p.utilityType,
+    region: p.region,
+    supportsCMD: p.supportsCMD,
+    supportsDMD: p.supportsDMD,
+    supportsInterval: p.supportsInterval,
+    supportsBilling: p.supportsBilling,
+    customerPortalUrl: p.customerPortalUrl,
+    registrationUrl: p.registrationUrl,
+    notes: p.notes,
+  }));
+  res.json({ providers });
+});
+
+/** List connections for this landlord */
+router.get("/green-button/connections", async (req, res) => {
+  const authReq = req as AuthRequest;
+  try {
+    const connections = await db.greenButtonConnection.findMany({
+      where: { landlordId: authReq.landlordId },
+      include: { unit: { select: { id: true, label: true, address: true } } },
+      orderBy: { createdAt: "desc" },
+    });
+    // Strip tokens from response
+    const safe = connections.map((c) => ({
+      ...c,
+      accessToken: c.accessToken ? "••••••" : null,
+      refreshToken: c.refreshToken ? "••••••" : null,
+    }));
+    res.json({ items: safe });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+/** Create a new Green Button connection (initiate OAuth or manual) */
+router.post("/green-button/connections", async (req, res) => {
+  const authReq = req as AuthRequest;
+  const schema = z.object({
+    provider: z.string().min(1),
+    unitId: z.string().min(1),
+    utilityType: z.nativeEnum(UtilityType),
+    accountNumber: z.string().optional(),
+    meterNumber: z.string().optional(),
+  });
+  const parsed = schema.safeParse(req.body || {});
+  if (!parsed.success) return res.status(400).json({ error: "validation_failed", details: parsed.error.flatten() });
+
+  const provider = greenButton.getProvider(parsed.data.provider);
+  if (!provider) return res.status(400).json({ error: "unknown_provider" });
+
+  try {
+    const connection = await db.greenButtonConnection.create({
+      data: {
+        provider: parsed.data.provider,
+        utilityType: parsed.data.utilityType,
+        unitId: parsed.data.unitId,
+        landlordId: authReq.landlordId,
+        accountNumber: parsed.data.accountNumber,
+        meterNumber: parsed.data.meterNumber,
+        status: "pending",
+      },
+    });
+
+    // If provider supports CMD, build auth URL
+    let authUrl: string | undefined;
+    const clientId = process.env[`GB_${parsed.data.provider.toUpperCase()}_CLIENT_ID`];
+    const redirectUri = process.env.GB_REDIRECT_URI || `${req.protocol}://${req.get("host")}/admin/green-button/callback`;
+    if (provider.supportsCMD && clientId) {
+      authUrl = greenButton.buildAuthorizationUrl(provider, {
+        clientId,
+        redirectUri,
+        state: connection.id,
+      });
+    }
+
+    res.json({
+      connection,
+      authUrl,
+      provider: {
+        name: provider.name,
+        supportsCMD: provider.supportsCMD,
+        supportsDMD: provider.supportsDMD,
+        customerPortalUrl: provider.customerPortalUrl,
+      },
+    });
+  } catch (err: any) {
+    if (err.code === "P2002") return res.status(409).json({ error: "connection_exists", message: "A connection for this provider, unit, and utility type already exists." });
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+/** OAuth callback — exchange code for tokens */
+router.get("/green-button/callback", async (req, res) => {
+  const { code, state, error } = req.query;
+  if (error) return res.status(400).send(`Authorization denied: ${error}`);
+  if (!code || !state) return res.status(400).send("Missing code or state parameter");
+
+  try {
+    const connection = await db.greenButtonConnection.findUnique({ where: { id: String(state) } });
+    if (!connection) return res.status(404).send("Connection not found");
+
+    const provider = greenButton.getProvider(connection.provider);
+    if (!provider) return res.status(400).send("Unknown provider");
+
+    const clientId = process.env[`GB_${connection.provider.toUpperCase()}_CLIENT_ID`] || "";
+    const clientSecret = process.env[`GB_${connection.provider.toUpperCase()}_CLIENT_SECRET`] || "";
+    const redirectUri = process.env.GB_REDIRECT_URI || `${req.protocol}://${req.get("host")}/admin/green-button/callback`;
+
+    const tokens = await greenButton.exchangeCodeForTokens(provider, {
+      code: String(code),
+      clientId,
+      clientSecret,
+      redirectUri,
+    });
+
+    await db.greenButtonConnection.update({
+      where: { id: connection.id },
+      data: {
+        accessToken: greenButton.encryptToken(tokens.accessToken),
+        refreshToken: greenButton.encryptToken(tokens.refreshToken),
+        tokenExpiresAt: new Date(Date.now() + tokens.expiresIn * 1000),
+        subscriptionId: tokens.subscriptionId,
+        status: "connected",
+        lastError: null,
+      },
+    });
+
+    // Redirect back to dashboard
+    res.redirect("/dashboard.html#utilities");
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error("Green Button OAuth callback failed", err);
+    res.status(500).send(`OAuth exchange failed: ${(err as Error).message}`);
+  }
+});
+
+/** Sync (fetch) latest usage data from a connected provider */
+router.post("/green-button/sync/:connectionId", async (req, res) => {
+  const authReq = req as unknown as AuthRequest;
+  try {
+    const connection = await db.greenButtonConnection.findUnique({ where: { id: req.params.connectionId } });
+    if (!connection || connection.landlordId !== authReq.landlordId) return res.status(404).json({ error: "not_found" });
+    if (connection.status !== "connected" || !connection.accessToken) {
+      return res.status(400).json({ error: "not_connected", message: "Connection is not authorized. Complete OAuth flow first." });
+    }
+
+    const provider = greenButton.getProvider(connection.provider);
+    if (!provider) return res.status(400).json({ error: "unknown_provider" });
+
+    // Check if token needs refresh
+    let accessToken = greenButton.decryptToken(connection.accessToken);
+    if (connection.tokenExpiresAt && connection.tokenExpiresAt < new Date()) {
+      if (!connection.refreshToken) {
+        await db.greenButtonConnection.update({ where: { id: connection.id }, data: { status: "expired", lastError: "Token expired, no refresh token" } });
+        return res.status(401).json({ error: "token_expired" });
+      }
+      const clientId = process.env[`GB_${connection.provider.toUpperCase()}_CLIENT_ID`] || "";
+      const clientSecret = process.env[`GB_${connection.provider.toUpperCase()}_CLIENT_SECRET`] || "";
+      const refreshed = await greenButton.refreshAccessToken(provider, {
+        refreshToken: greenButton.decryptToken(connection.refreshToken),
+        clientId,
+        clientSecret,
+      });
+      accessToken = refreshed.accessToken;
+      await db.greenButtonConnection.update({
+        where: { id: connection.id },
+        data: {
+          accessToken: greenButton.encryptToken(refreshed.accessToken),
+          refreshToken: greenButton.encryptToken(refreshed.refreshToken),
+          tokenExpiresAt: new Date(Date.now() + refreshed.expiresIn * 1000),
+        },
+      });
+    }
+
+    // Fetch usage data
+    const startDate = new Date();
+    startDate.setMonth(startDate.getMonth() - 3); // Last 3 months
+    const data = await greenButton.fetchUsageData(provider, {
+      accessToken,
+      subscriptionId: connection.subscriptionId || undefined,
+      usagePointId: connection.usagePointId || undefined,
+      startDate,
+    });
+
+    // Convert to bills and save
+    const bills = greenButton.convertToBills(data, {
+      unitId: connection.unitId,
+      landlordId: authReq.landlordId,
+      provider: connection.provider,
+      utilityType: connection.utilityType as "HYDRO" | "WATER_GAS",
+    });
+
+    let savedCount = 0;
+    for (const bill of bills) {
+      // Avoid duplicates: check if bill already exists for this period + unit + type
+      const existing = await db.utilityBill.findFirst({
+        where: {
+          unitId: bill.unitId,
+          utilityType: bill.utilityType as UtilityType,
+          billingPeriodStart: bill.billingPeriodStart,
+          billingPeriodEnd: bill.billingPeriodEnd,
+        },
+      });
+      if (!existing) {
+        await db.utilityBill.create({ data: bill as any });
+        savedCount++;
+      }
+    }
+
+    await db.greenButtonConnection.update({
+      where: { id: connection.id },
+      data: { lastSyncAt: new Date(), lastError: null },
+    });
+
+    res.json({
+      ok: true,
+      usagePoints: data.usagePoints.length,
+      intervalReadings: data.intervalReadings.length,
+      usageSummaries: data.usageSummaries.length,
+      billsSaved: savedCount,
+      totalBillsFound: bills.length,
+    });
+  } catch (err) {
+    // Update connection with error
+    await db.greenButtonConnection.update({
+      where: { id: req.params.connectionId },
+      data: { lastError: (err as Error).message, status: "error" },
+    }).catch(() => { });
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+/** Upload Green Button XML file (Download My Data) */
+router.post("/green-button/upload", async (req, res) => {
+  const authReq = req as AuthRequest;
+  const schema = z.object({
+    xml: z.string().min(10),
+    unitId: z.string().min(1),
+    provider: z.string().min(1),
+    utilityType: z.nativeEnum(UtilityType),
+  });
+  const parsed = schema.safeParse(req.body || {});
+  if (!parsed.success) return res.status(400).json({ error: "validation_failed", details: parsed.error.flatten() });
+
+  try {
+    const data = greenButton.parseUploadedGreenButtonFile(parsed.data.xml);
+    const bills = greenButton.convertToBills(data, {
+      unitId: parsed.data.unitId,
+      landlordId: authReq.landlordId,
+      provider: parsed.data.provider,
+      utilityType: parsed.data.utilityType as "HYDRO" | "WATER_GAS",
+    });
+
+    let savedCount = 0;
+    for (const bill of bills) {
+      const existing = await db.utilityBill.findFirst({
+        where: {
+          unitId: bill.unitId,
+          utilityType: bill.utilityType as UtilityType,
+          billingPeriodStart: bill.billingPeriodStart,
+          billingPeriodEnd: bill.billingPeriodEnd,
+        },
+      });
+      if (!existing) {
+        await db.utilityBill.create({ data: bill as any });
+        savedCount++;
+      }
+    }
+
+    res.json({
+      ok: true,
+      parsed: {
+        usagePoints: data.usagePoints.length,
+        intervalReadings: data.intervalReadings.length,
+        usageSummaries: data.usageSummaries.length,
+      },
+      billsSaved: savedCount,
+      totalBillsFound: bills.length,
+    });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+/** Delete a Green Button connection */
+router.delete("/green-button/connections/:id", async (req, res) => {
+  const authReq = req as unknown as AuthRequest;
+  try {
+    const connection = await db.greenButtonConnection.findUnique({ where: { id: req.params.id } });
+    if (!connection || connection.landlordId !== authReq.landlordId) return res.status(404).json({ error: "not_found" });
+    await db.greenButtonConnection.delete({ where: { id: req.params.id } });
+    res.json({ deleted: true });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
 });
 
 export default router;

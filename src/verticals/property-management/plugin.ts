@@ -1,0 +1,414 @@
+/**
+ * Property Management Vertical Plugin
+ *
+ * First-party plugin that wraps all existing property-management logic
+ * (tenants, units, maintenance, RTA profiles, contractors, utility bills)
+ * into the VerticalPlugin interface.
+ *
+ * This is the reference implementation — future verticals (dental, legal,
+ * restaurant, etc.) follow the same shape.
+ */
+
+import { Router } from "express";
+import {
+    VerticalPlugin,
+    ResolvedRole,
+    RoleDefinition,
+    InboundMessageContext,
+    OwnerMessageContext,
+    PromptContext,
+    UseCaseDefinition,
+    VerticalPlanLimits,
+} from "../../services/verticalPlugin";
+import { ToolDefinition } from "../../services/toolRegistry";
+import { AgentRunResult } from "../../services/agentFramework";
+
+// Domain-specific imports
+import { registerBuiltinTools } from "../../services/tools/builtinTools";
+import { getProfile, listProvinces, RtaProfile } from "../../config/rtaProfiles";
+import repo from "../../services/repository";
+import { db } from "../../config/database";
+
+// ═══════════════════════════════════════════════════════════
+//  ROLE DEFINITIONS
+// ═══════════════════════════════════════════════════════════
+
+const ROLES: RoleDefinition[] = [
+    {
+        role: "landlord",
+        label: "Landlord / Owner",
+        aiEnabled: true,
+        description: "Property owner or manager — the business account holder",
+    },
+    {
+        role: "tenant",
+        label: "Tenant",
+        aiEnabled: true,
+        description: "Resident who rents a unit from the landlord",
+    },
+    {
+        role: "contractor",
+        label: "Contractor",
+        aiEnabled: false,
+        description: "Maintenance or repair professional dispatched by the landlord",
+    },
+];
+
+// ═══════════════════════════════════════════════════════════
+//  USE CASES
+// ═══════════════════════════════════════════════════════════
+
+const USE_CASES: UseCaseDefinition[] = [
+    {
+        id: "tenant-message",
+        label: "Tenant Message Handler",
+        description: "Triage inbound tenant messages, create maintenance requests, draft legally-aware replies",
+        forRoles: ["tenant"],
+    },
+    {
+        id: "landlord-assistant",
+        label: "Landlord Assistant",
+        description: "Interactive AI advisor — look up data, answer questions, manage properties",
+        forRoles: ["landlord"],
+    },
+    {
+        id: "utility-check",
+        label: "Utility Bill Checker",
+        description: "Scrape utility portals, extract bills, detect anomalies",
+        forRoles: ["landlord"],
+    },
+    {
+        id: "page-reader",
+        label: "Page Reader",
+        description: "Read and summarize webpages with property-management focus",
+        forRoles: ["landlord"],
+    },
+];
+
+// ═══════════════════════════════════════════════════════════
+//  PLAN LIMITS (property-management-specific resources)
+// ═══════════════════════════════════════════════════════════
+
+const PLAN_LIMITS: VerticalPlanLimits = {
+    FREE: {
+        maxUnits: 3,
+        utilityTracking: false,
+        contractorDispatch: false,
+        maxWhatsAppNumbers: 1,
+    },
+    PRO: {
+        maxUnits: 25,
+        utilityTracking: true,
+        contractorDispatch: true,
+        maxWhatsAppNumbers: 3,
+    },
+    ENTERPRISE: {
+        maxUnits: Infinity,
+        utilityTracking: true,
+        contractorDispatch: true,
+        maxWhatsAppNumbers: 10,
+    },
+};
+
+// ═══════════════════════════════════════════════════════════
+//  HELPERS
+// ═══════════════════════════════════════════════════════════
+
+/** Fetch landlord context from DB (used by prompt builders) */
+async function getAccountContext(accountId: string) {
+    const landlord = await db.landlord.findUnique({
+        where: { id: accountId },
+        include: { settings: true },
+    });
+    return {
+        plan: (landlord?.plan || "FREE") as "FREE" | "PRO" | "ENTERPRISE",
+        province: landlord?.province || "ON",
+        name: landlord?.name || "Landlord",
+        company: landlord?.company || "",
+    };
+}
+
+// ═══════════════════════════════════════════════════════════
+//  PLUGIN IMPLEMENTATION
+// ═══════════════════════════════════════════════════════════
+
+export const propertyManagementPlugin: VerticalPlugin = {
+    id: "property-management",
+    name: "Property Management",
+    version: "1.0.0",
+
+    // ── Tools ────────────────────────────────────────────
+
+    registerTools(): ToolDefinition[] {
+        return registerBuiltinTools();
+    },
+
+    // ── Roles & Routing ─────────────────────────────────
+
+    roleDefinitions: ROLES,
+
+    async resolveRole(phone: string, accountId: string): Promise<ResolvedRole | null> {
+        // Check if sender IS the landlord (account owner)
+        const landlord = await repo.findLandlordByWhatsApp(phone);
+        if (landlord && landlord.id === accountId) {
+            return {
+                role: "landlord",
+                personId: landlord.id,
+                personName: landlord.name || "Owner",
+                metadata: { province: landlord.province, plan: landlord.plan },
+            };
+        }
+
+        // Check if sender is a tenant belonging to this account
+        const tenant = await repo.findTenantByPhone(phone);
+        if (tenant && tenant.landlordId === accountId) {
+            return {
+                role: "tenant",
+                personId: tenant.id,
+                personName: tenant.name || "Tenant",
+                metadata: {
+                    unitId: (tenant as any).unitId,
+                    autoReplyEnabled: (tenant as any).autoReplyEnabled,
+                },
+            };
+        }
+
+        // Check contractors
+        const contractor = await repo.findContractorByPhone(phone);
+        if (contractor && (contractor as any).landlordId === accountId) {
+            return {
+                role: "contractor",
+                personId: contractor.id,
+                personName: contractor.name || "Contractor",
+                metadata: { role: (contractor as any).role },
+            };
+        }
+
+        return null;
+    },
+
+    // ── Message Handling ────────────────────────────────
+
+    async handleInboundMessage(ctx: InboundMessageContext): Promise<AgentRunResult> {
+        // Lazy-import orchestrator to avoid circular deps
+        const orchestrator = require("../../services/agentOrchestrator").default;
+
+        if (ctx.sender.role === "tenant") {
+            return orchestrator.handleTenantMessage({
+                tenantPhone: ctx.phone,
+                message: ctx.message,
+                landlordId: ctx.accountId,
+                mediaDescription: ctx.imageDescription,
+                imageBase64: ctx.imageBase64,
+            });
+        }
+
+        // For non-tenant roles, use the landlord assistant
+        return orchestrator.landlordAssistantAgent({
+            landlordId: ctx.accountId,
+            question: ctx.message,
+        });
+    },
+
+    async handleOwnerMessage(ctx: OwnerMessageContext): Promise<AgentRunResult | null> {
+        const orchestrator = require("../../services/agentOrchestrator").default;
+        return orchestrator.landlordAssistantAgent({
+            landlordId: ctx.accountId,
+            question: ctx.message,
+        });
+    },
+
+    // ── System Prompts ──────────────────────────────────
+
+    getSystemPrompt(useCase: string, context: PromptContext): string {
+        const province = (context.region || "ON") as string;
+        const profile = getProfile(province);
+        const accountName = (context.accountName as string) || "Property Manager";
+        const company = (context.company as string) || "";
+
+        switch (useCase) {
+            case "tenant-message":
+                return buildTenantMessagePrompt(accountName, company, profile);
+
+            case "landlord-assistant":
+                return buildLandlordAssistantPrompt(accountName, company, profile);
+
+            case "utility-check":
+                return buildUtilityCheckPrompt();
+
+            case "page-reader":
+                return buildPageReaderPrompt();
+
+            default:
+                return `You are an AI property management assistant for ${accountName}. Be helpful and concise.`;
+        }
+    },
+
+    listUseCases(): UseCaseDefinition[] {
+        return USE_CASES;
+    },
+
+    // ── Knowledge Base ──────────────────────────────────
+
+    getKnowledge(context: { region?: string; accountId?: string }): string {
+        const profile = getProfile(context.region || "ON");
+        return [
+            `## Tenancy Law: ${profile.name}`,
+            `Legislation: ${profile.legislation}`,
+            `Entry notice: ${profile.noticePeriodsEntry}`,
+            `Emergency repair max hours: ${profile.emergencyRepairMaxHours}`,
+            `Rent increase rules: ${profile.rentIncreaseRules}`,
+            `Dispute body: ${profile.disputeBody}`,
+            "",
+            profile.promptAddendum,
+        ].join("\n");
+    },
+
+    // ── Plan Limits ─────────────────────────────────────
+
+    planLimits: PLAN_LIMITS,
+
+    // ── Routes ──────────────────────────────────────────
+
+    getRouter(): Router {
+        // The admin routes are already defined in routes/admin.ts.
+        // In a fully decoupled future, domain-specific routes would move here.
+        // For now, return an empty router — the existing admin routes work.
+        const router = Router();
+
+        // Province / RTA endpoint (domain-specific)
+        router.get("/provinces", (_req, res) => {
+            res.json({ provinces: listProvinces() });
+        });
+
+        return router;
+    },
+
+    // ── Lifecycle ───────────────────────────────────────
+
+    async initialize(): Promise<void> {
+        console.log("[PropertyManagement] Plugin initialized");
+    },
+
+    async shutdown(): Promise<void> {
+        console.log("[PropertyManagement] Plugin shut down");
+    },
+};
+
+// ═══════════════════════════════════════════════════════════
+//  PROMPT BUILDERS (extracted from agentOrchestrator.ts)
+// ═══════════════════════════════════════════════════════════
+
+function buildTenantMessagePrompt(
+    accountName: string,
+    company: string,
+    profile: RtaProfile,
+): string {
+    return [
+        `You are the AI property manager for ${accountName}${company ? ` (${company})` : ""}.`,
+        `Jurisdiction: ${profile.name} — ${profile.legislation}.`,
+        profile.promptAddendum,
+        "",
+        "A tenant has sent a WhatsApp message. Your job:",
+        "1. Look up the tenant using lookup_tenant with their phone number.",
+        "2. Check conversation_history for previous interactions to understand context.",
+        "3. Triage the message using triage_message to classify severity.",
+        "4. If this is a maintenance issue (not a simple greeting/question), create a maintenance request using create_maintenance_request.",
+        "5. Draft a casual, legally-aware reply for the tenant using draft_reply.",
+        "6. If severity is HIGH or CRITICAL, use alert_landlord to notify the landlord immediately.",
+        "7. If a contractor is needed, use list_contractors (with category matching) and optionally dispatch_contractor.",
+        "",
+        "═══ PROACTIVE RESEARCH — CRITICAL ═══",
+        "When a tenant reports an issue involving a specific product, appliance, or piece of equipment:",
+        "• Use web_search to find the product's user manual, troubleshooting guide, or relevant support page.",
+        "• Use fetch_page_content to read the most relevant result and extract useful instructions.",
+        "• Include actual links and specific troubleshooting steps in your reply — do NOT say 'I'll find the manual later'.",
+        "• Example: For a thermostat issue, search for the exact model manual and include the link + key instructions.",
+        "• Even for general issues (leaky faucet, AC not working), search for common troubleshooting steps.",
+        "NEVER promise to do something later that you can do RIGHT NOW with the tools available to you.",
+        "NEVER say things like 'I'll send you the manual in an hour' — find it immediately and include it.",
+        "",
+        "Always be concise and natural. The tenant should feel heard, not processed.",
+        "Do NOT send messages directly — just prepare the draft for landlord approval.",
+        "",
+        "═══ OUTPUT FORMAT — CRITICAL ═══",
+        "Your final message MUST end with the tenant reply and NOTHING else after it.",
+        "Use this exact format:",
+        "",
+        "[Your internal thinking, analysis, and summary of actions can go here]",
+        "",
+        "---DRAFT_REPLY---",
+        "[The actual message to send to the tenant. ONLY this part will be sent. Keep it natural and concise.]",
+        "",
+        "IMPORTANT: Everything ABOVE ---DRAFT_REPLY--- is internal only. Everything BELOW it is sent to the tenant.",
+        "The draft reply must be a standalone message — no markdown headers, no bullet points of actions taken.",
+    ].join("\n");
+}
+
+function buildLandlordAssistantPrompt(
+    accountName: string,
+    company: string,
+    profile: RtaProfile,
+): string {
+    return [
+        `You are the AI assistant for ${accountName}${company ? ` (${company})` : ""}.`,
+        `Jurisdiction: ${profile.name} — ${profile.legislation}.`,
+        profile.promptAddendum,
+        "",
+        "The landlord is asking you a question. You have access to tools to look up:",
+        "- Maintenance requests (list_maintenance, update_maintenance_status)",
+        "- Tenants and units (lookup_tenant, lookup_unit)",
+        "- Contractors (list_contractors with category matching, dispatch_contractor)",
+        "- Utility bills (lookup_utility_bills)",
+        "- Conversation history (conversation_history) — look up past interactions with any phone number",
+        "- Tenancy law info (rta_info)",
+        "- Current time (current_time)",
+        "- Web search (web_search) — search Google for manuals, guides, pricing, regulations, product info, etc.",
+        "- Page reader (fetch_page_content) — read a specific webpage to extract details",
+        "",
+        "═══ WEB SEARCH — USE IT PROACTIVELY ═══",
+        "When the landlord asks about products, appliances, regulations, or anything that needs external info:",
+        "• Use web_search to look it up immediately — manuals, troubleshooting, pricing, reviews, legal info.",
+        "• Use fetch_page_content to read relevant pages and extract key details.",
+        "• Include actual URLs and specific facts in your answer.",
+        "NEVER say \"I'll look into that\" or \"I'll get back to you\" — search NOW and answer NOW.",
+        "",
+        "Use tools to gather facts before answering. Be concise and practical.",
+        "If the landlord asks about a specific maintenance issue, look it up.",
+        "Keep responses conversational — 2-4 sentences usually, more only if detailed info is requested.",
+    ].join("\n");
+}
+
+function buildUtilityCheckPrompt(): string {
+    return [
+        "You are a utility bill management agent.",
+        "Your task is to check for new utility bills by scraping the provider's website.",
+        "",
+        "Steps:",
+        "1. Use get_utility_credentials to find login credentials for the unit.",
+        "2. Use scrape_utility_bill with the credential ID to log in and extract bill data.",
+        "3. Review the extracted data (amounts, dates, usage).",
+        "4. Use lookup_utility_bills to compare with previous bills and check for anomalies.",
+        "5. Report your findings — amount, billing period, any anomalies detected.",
+        "",
+        "If the scraper can't find the login form or encounters an error, explain what went wrong.",
+        "Be factual about dollar amounts and dates.",
+    ].join("\n");
+}
+
+function buildPageReaderPrompt(): string {
+    return [
+        "You are a web reading assistant for a property manager.",
+        "Your task is to read a webpage and extract useful information.",
+        "",
+        "Steps:",
+        "1. Use web_read_page to extract the page content.",
+        "2. If the page has tables (like bills or statements), analyze them.",
+        "3. If a question was asked, answer it based on the page content.",
+        "4. Provide a concise summary of the key information.",
+        "",
+        "Focus on information relevant to property management: bills, regulations, prices, dates.",
+    ].join("\n");
+}
+
+export default propertyManagementPlugin;

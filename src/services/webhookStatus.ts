@@ -7,6 +7,9 @@ type WebhookStatus = {
   delayMs?: number;
   sender?: string;
   isGroup?: boolean;
+  /** Role of the sender: "owner", "tenant", "patient", "client", etc. */
+  senderRole?: string;
+  /** @deprecated Use senderRole instead. Kept for backward compat. */
   isLandlord?: boolean;
 };
 

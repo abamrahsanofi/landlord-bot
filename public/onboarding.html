@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NestMind AI — Welcome</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+        rel="stylesheet" />
+    <style>
+        :root {
+            --bg: #000000;
+            --surface: #111111;
+            --surface-2: #1a1a1a;
+            --border: #222222;
+            --border-light: #333333;
+            --text: #ffffff;
+            --text-secondary: #999999;
+            --text-muted: #666666;
+            --accent: #00c896;
+            --accent-glow: rgba(0, 200, 150, 0.15);
+            --accent-2: #7c5cff;
+            --gradient: linear-gradient(135deg, #00c896, #7c5cff);
+            --error-bg: rgba(239, 68, 68, 0.1);
+            --error-border: rgba(239, 68, 68, 0.3);
+            --error-text: #f87171;
+            --success-bg: rgba(34, 197, 94, 0.1);
+            --success-border: rgba(34, 197, 94, 0.3);
+            --success-text: #4ade80;
+            --info-bg: rgba(0, 200, 150, 0.08);
+            --info-border: rgba(0, 200, 150, 0.2);
+            --info-text: #00c896;
+            --radius: 16px;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            position: relative;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            width: 600px;
+            height: 600px;
+            background: radial-gradient(circle, var(--accent-glow) 0%, transparent 70%);
+            top: -200px;
+            right: -100px;
+            pointer-events: none;
+        }
+
+        .container {
+            max-width: 640px;
+            margin: 0 auto;
+            padding: 48px 24px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .header .logo {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            text-decoration: none;
+            margin-bottom: 16px;
+        }
+
+        .header .logo-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            background: var(--gradient);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+        }
+
+        .header .logo-text {
+            font-weight: 800;
+            font-size: 20px;
+            color: #fff;
+        }
+
+        .header h1 {
+            font-size: 28px;
+            font-weight: 700;
+            color: #fff;
+            margin-top: 8px;
+        }
+
+        .header p {
+            color: var(--text-muted);
+            margin-top: 8px;
+            font-size: 15px;
+        }
+
+        .stepper {
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+            margin-bottom: 40px;
+        }
+
+        .step-dot {
+            width: 48px;
+            height: 5px;
+            border-radius: 3px;
+            background: var(--border-light);
+            transition: background 0.3s;
+        }
+
+        .step-dot.active {
+            background: var(--accent);
+        }
+
+        .step-dot.done {
+            background: var(--accent-2);
+        }
+
+        .step {
+            display: none;
+        }
+
+        .step.active {
+            display: block;
+        }
+
+        .card {
+            background: var(--surface);
+            border-radius: var(--radius);
+            padding: 36px;
+            border: 1px solid var(--border);
+            margin-bottom: 24px;
+        }
+
+        .card h2 {
+            font-size: 20px;
+            margin-bottom: 8px;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .card h2 .step-num {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 28px;
+            height: 28px;
+            border-radius: 8px;
+            background: var(--gradient);
+            font-size: 14px;
+            font-weight: 700;
+            flex-shrink: 0;
+        }
+
+        .card p {
+            color: var(--text-secondary);
+            font-size: 14px;
+            margin-bottom: 20px;
+            line-height: 1.6;
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--text-secondary);
+            margin-bottom: 6px;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 12px 14px;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            background: var(--bg);
+            color: var(--text);
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.2s;
+            font-family: inherit;
+        }
+
+        .form-group input:focus {
+            border-color: var(--accent);
+        }
+
+        .form-group input::placeholder {
+            color: var(--text-muted);
+        }
+
+        .form-row {
+            display: flex;
+            gap: 12px;
+        }
+
+        .form-row .form-group {
+            flex: 1;
+        }
+
+        .btn {
+            padding: 12px 28px;
+            border: none;
+            border-radius: 100px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: inherit;
+        }
+
+        .btn-primary {
+            background: #fff;
+            color: #000;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 8px 24px rgba(255, 255, 255, 0.1);
+        }
+
+        .btn-secondary {
+            background: transparent;
+            color: var(--text-secondary);
+            border: 1px solid var(--border-light);
+        }
+
+        .btn-secondary:hover {
+            border-color: #fff;
+            color: #fff;
+        }
+
+        .btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        .btn-row {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 8px;
+        }
+
+        .info-box {
+            background: var(--info-bg);
+            border: 1px solid var(--info-border);
+            padding: 12px 16px;
+            border-radius: 10px;
+            color: var(--info-text);
+            font-size: 13px;
+            margin-bottom: 16px;
+            line-height: 1.5;
+        }
+
+        .error-box {
+            background: var(--error-bg);
+            border: 1px solid var(--error-border);
+            padding: 12px 16px;
+            border-radius: 10px;
+            color: var(--error-text);
+            font-size: 13px;
+            margin-bottom: 16px;
+            display: none;
+        }
+
+        .checklist {
+            list-style: none;
+            padding: 0;
+        }
+
+        .checklist li {
+            padding: 14px 0;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+
+        .checklist li:last-child {
+            border-bottom: none;
+        }
+
+        .checklist .icon {
+            font-size: 20px;
+            flex-shrink: 0;
+        }
+
+        .skip-link {
+            text-align: center;
+            margin-top: 16px;
+        }
+
+        .skip-link a {
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 13px;
+            transition: color 0.2s;
+        }
+
+        .skip-link a:hover {
+            color: #fff;
+        }
+
+        @media (max-width: 480px) {
+            .container {
+                padding: 32px 16px;
+            }
+
+            .card {
+                padding: 24px;
+            }
+
+            .form-row {
+                flex-direction: column;
+                gap: 0;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="header">
+            <a href="/" class="logo">
+                <div class="logo-icon">🏠</div>
+                <span class="logo-text">NestMind AI</span>
+            </a>
+            <h1>Welcome aboard!</h1>
+            <p>Let's get your AI property manager set up in a few steps.</p>
+        </div>
+
+        <div class="stepper">
+            <div class="step-dot active" id="dot-0"></div>
+            <div class="step-dot" id="dot-1"></div>
+            <div class="step-dot" id="dot-2"></div>
+            <div class="step-dot" id="dot-3"></div>
+        </div>
+
+        <div id="onboardError" class="error-box"></div>
+
+        <!-- Step 1: WhatsApp -->
+        <div class="step active" id="step-0">
+            <div class="card">
+                <h2><span class="step-num">1</span> Connect WhatsApp</h2>
+                <p>Add your WhatsApp number so tenants can reach you. The AI will triage messages and only alert you
+                    when needed.</p>
+                <div class="info-box">Your WhatsApp number was saved during signup. You can add more numbers below if
+                    you manage properties with partners.</div>
+                <div class="form-group">
+                    <label>Additional WhatsApp Number (optional)</label>
+                    <input type="tel" id="extraPhone" placeholder="+14165559999" />
+                </div>
+                <div class="btn-row">
+                    <span></span>
+                    <button class="btn btn-primary" onclick="completeStep(0)">Next →</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 2: Add Property -->
+        <div class="step" id="step-1">
+            <div class="card">
+                <h2><span class="step-num">2</span> Add Your First Property</h2>
+                <p>Add a rental unit so the AI knows about your properties.</p>
+                <div class="form-group">
+                    <label>Unit Name / Address</label>
+                    <input type="text" id="unitName" placeholder="e.g. 123 Main St, Apt 4B" />
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Bedrooms</label>
+                        <input type="number" id="unitBeds" value="2" min="0" />
+                    </div>
+                    <div class="form-group">
+                        <label>Bathrooms</label>
+                        <input type="number" id="unitBaths" value="1" min="0" />
+                    </div>
+                </div>
+                <div class="btn-row">
+                    <button class="btn btn-secondary" onclick="goStep(0)">← Back</button>
+                    <button class="btn btn-primary" onclick="createUnit()">Add Unit & Next →</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 3: Add Tenant -->
+        <div class="step" id="step-2">
+            <div class="card">
+                <h2><span class="step-num">3</span> Add a Tenant</h2>
+                <p>Add a tenant to the unit you just created. They'll be able to WhatsApp in maintenance requests.</p>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>First Name</label>
+                        <input type="text" id="tenantFirst" placeholder="John" />
+                    </div>
+                    <div class="form-group">
+                        <label>Last Name</label>
+                        <input type="text" id="tenantLast" placeholder="Doe" />
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Tenant WhatsApp Number</label>
+                    <input type="tel" id="tenantPhone" placeholder="+14165550000" />
+                </div>
+                <div class="btn-row">
+                    <button class="btn btn-secondary" onclick="goStep(1)">← Back</button>
+                    <button class="btn btn-primary" onclick="createTenant()">Add Tenant & Next →</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 4: All Done -->
+        <div class="step" id="step-3">
+            <div class="card">
+                <h2>🎉 You're all set!</h2>
+                <p>Your AI property manager is ready. Here's how it works:</p>
+                <ul class="checklist">
+                    <li><span class="icon">📱</span> Tenant sends a WhatsApp message about a maintenance issue</li>
+                    <li><span class="icon">🤖</span> AI triages the request (emergency / normal / cosmetic)</li>
+                    <li><span class="icon">📋</span> Request logged in your dashboard with AI-drafted response</li>
+                    <li><span class="icon">🔔</span> You get a WhatsApp alert — only when it matters</li>
+                    <li><span class="icon">⚖️</span> AI ensures compliance with your local tenancy laws</li>
+                </ul>
+                <div style="margin-top: 24px;">
+                    <button class="btn btn-primary" style="width:100%" onclick="window.location.href='/dashboard'">Go to
+                        Dashboard →</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="skip-link">
+            <a href="/dashboard">Skip setup, go to dashboard →</a>
+        </div>
+    </div>
+
+    <script>
+        const token = localStorage.getItem('token');
+        if (!token) window.location.href = '/login';
+
+        const API = (path, opts = {}) => {
+            opts.headers = { ...opts.headers, 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
+            return fetch(path, opts).then(async r => {
+                const data = await r.json();
+                if (!r.ok) throw new Error(data.message || data.error || 'Request failed');
+                return data;
+            });
+        };
+
+        let currentStep = 0;
+        let createdUnitId = null;
+
+        function goStep(n) {
+            document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
+            document.getElementById(`step-${n}`).classList.add('active');
+            document.querySelectorAll('.step-dot').forEach((d, i) => {
+                d.classList.remove('active');
+                d.classList.toggle('done', i < n);
+                if (i === n) d.classList.add('active');
+            });
+            currentStep = n;
+        }
+
+        function showError(msg) {
+            const el = document.getElementById('onboardError');
+            el.textContent = msg;
+            el.style.display = 'block';
+            setTimeout(() => el.style.display = 'none', 5000);
+        }
+
+        function completeStep(n) {
+            goStep(n + 1);
+        }
+
+        async function createUnit() {
+            const name = document.getElementById('unitName').value.trim();
+            if (!name) { showError('Please enter a unit name or address.'); return; }
+            try {
+                const unit = await API('/admin/units', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        label: name,
+                        address: name,
+                    }),
+                });
+                createdUnitId = unit.unit?.id || unit.id;
+                goStep(2);
+            } catch (err) {
+                showError(err.message);
+            }
+        }
+
+        async function createTenant() {
+            const firstName = document.getElementById('tenantFirst').value.trim();
+            const lastName = document.getElementById('tenantLast').value.trim();
+            const phone = document.getElementById('tenantPhone').value.trim();
+            if (!firstName || !phone) { showError('Name and phone number are required.'); return; }
+            try {
+                await API('/admin/tenants', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        name: [firstName, lastName].filter(Boolean).join(' '),
+                        phone,
+                        unitId: createdUnitId,
+                    }),
+                });
+                goStep(3);
+            } catch (err) {
+                showError(err.message);
+            }
+        }
+    </script>
+</body>
+
+</html>

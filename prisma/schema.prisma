@@ -30,37 +30,102 @@ enum UtilityType {
 	HYDRO
 }
 
+enum Plan {
+	FREE
+	PRO
+	ENTERPRISE
+}
+
+// ── Multi-landlord ──────────────────────────────────────
+
+model Landlord {
+	id               String   @id @default(cuid())
+	email            String   @unique
+	passwordHash     String
+	name             String
+	company          String?
+	phone            String?
+	whatsappNumbers  String[] @default([])
+	plan             Plan     @default(FREE)
+	stripeCustomerId String?
+	province         String   @default("ON")
+	timezone         String   @default("America/Toronto")
+	messageCountThisMonth Int @default(0)
+	messageCountResetAt   DateTime @default(now())
+	createdAt        DateTime @default(now())
+	updatedAt        DateTime @updatedAt
+
+	settings         LandlordSettings?
+	tenants          Tenant[]
+	units            Unit[]
+	contractors      Contractor[]
+	requests         MaintenanceRequest[]
+	utilityBills     UtilityBill[]
+	utilityCredentials UtilityCredential[]
+	greenButtonConnections GreenButtonConnection[]
+	appSettings      AppSetting[]
+}
+
+model LandlordSettings {
+	id                     String   @id @default(cuid())
+	landlord               Landlord @relation(fields: [landlordId], references: [id])
+	landlordId             String   @unique
+	globalAutoReplyEnabled Boolean  @default(false)
+	batchDelaySeconds      Int      @default(30)
+	cooldownMinutes        Int      @default(5)
+	autoReplyMaxSeverity   String   @default("normal")
+	brandName              String?
+	signatureLine          String?
+	createdAt              DateTime @default(now())
+	updatedAt              DateTime @updatedAt
+}
+
+// ── Existing models (now scoped to landlord) ────────────
+
 model Tenant {
 	id          String               @id @default(cuid())
 	name        String
 	phone       String?              @unique
 	email       String?              @unique
 	autoReplyEnabled Boolean          @default(true)
+	landlord    Landlord?            @relation(fields: [landlordId], references: [id])
+	landlordId  String?
 	units       UnitTenant[]
 	requests    MaintenanceRequest[]
 	utilityBills UtilityBill[]
 	createdAt   DateTime             @default(now())
 	updatedAt   DateTime             @updatedAt
+
+	@@index([landlordId])
 }
 
 model AppSetting {
-  id        String   @id @default(cuid())
-  key       String   @unique
-  value     String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id         String    @id @default(cuid())
+  key        String
+  value      String
+  landlord   Landlord? @relation(fields: [landlordId], references: [id])
+  landlordId String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@unique([key, landlordId])
 }
 
 model Unit {
 	id            String               @id @default(cuid())
 	label         String
 	address       String
+	landlord      Landlord?            @relation(fields: [landlordId], references: [id])
+	landlordId    String?
 	tenants       UnitTenant[]
 	requests      MaintenanceRequest[]
 	utilityBills  UtilityBill[]
 	utilityCredentials UtilityCredential[]
+	greenButtonConnections GreenButtonConnection[]
 	createdAt     DateTime             @default(now())
 	updatedAt     DateTime             @updatedAt
+
+	@@index([landlordId])
 }
 
 model UnitTenant {
@@ -79,6 +144,8 @@ model MaintenanceRequest {
 	tenantId       String?
 	unit           Unit?             @relation(fields: [unitId], references: [id])
 	unitId         String?
+	landlord       Landlord?         @relation(fields: [landlordId], references: [id])
+	landlordId     String?
 	message        String
 	status         MaintenanceStatus @default(OPEN)
 	statusChangedAt DateTime          @default(now())
@@ -99,6 +166,7 @@ model MaintenanceRequest {
 	utilityBills   UtilityBill[]
 
 	@@index([status])
+	@@index([landlordId])
 }
 
 model UtilityBill {
@@ -119,10 +187,14 @@ model UtilityBill {
 	tenantId         String?
 	unit             Unit?        @relation(fields: [unitId], references: [id])
 	unitId           String?
+	landlord         Landlord?    @relation(fields: [landlordId], references: [id])
+	landlordId       String?
 	maintenance      MaintenanceRequest? @relation(fields: [maintenanceId], references: [id])
 	maintenanceId    String?
 	createdAt        DateTime     @default(now())
 	updatedAt        DateTime     @updatedAt
+
+	@@index([landlordId])
 }
 
 model Contractor {
@@ -131,18 +203,114 @@ model Contractor {
 	phone     String   @unique
 	email     String?
 	role      String?
+	specialties String[] @default([])
+	active    Boolean  @default(true)
+	landlord  Landlord? @relation(fields: [landlordId], references: [id])
+	landlordId String?
 	createdAt DateTime @default(now())
 	updatedAt DateTime @updatedAt
+
+	@@index([landlordId])
 }
 
 model UtilityCredential {
-	id          String      @id @default(cuid())
-	unit        Unit        @relation(fields: [unitId], references: [id])
-	unitId      String
-	utilityType UtilityType
-	username    String?
-	password    String?
-	notes       String?
-	createdAt   DateTime    @default(now())
-	updatedAt   DateTime    @updatedAt
+	id              String      @id @default(cuid())
+	unit            Unit        @relation(fields: [unitId], references: [id])
+	unitId          String
+	landlord        Landlord?   @relation(fields: [landlordId], references: [id])
+	landlordId      String?
+	utilityType     UtilityType
+	username        String?
+	password        String?
+	passwordEncrypted String?
+	url             String?
+	notes           String?
+	createdAt       DateTime    @default(now())
+	updatedAt       DateTime    @updatedAt
+
+	@@index([landlordId])
+}
+
+// ── Conversation Memory ─────────────────────────────────
+
+model ConversationMessage {
+	id         String   @id @default(cuid())
+	phone      String
+	landlordId String?
+	role       String   // "tenant" | "ai" | "landlord" | "system"
+	content    String
+	meta       Json?
+	createdAt  DateTime @default(now())
+
+	@@index([phone, landlordId])
+	@@index([createdAt])
+}
+
+// ── Persistent Reminders ────────────────────────────────
+
+model Reminder {
+	id          String   @id @default(cuid())
+	landlordId  String?
+	type        String   // "rent" | "utility"
+	dayOfMonth  Int
+	timeUtc     String
+	style       String   // "short" | "medium" | "professional" | "casual"
+	active      Boolean  @default(true)
+	lastSentAt  DateTime?
+	createdAt   DateTime @default(now())
+	updatedAt   DateTime @updatedAt
+
+	@@index([landlordId])
+	@@index([active])
+}
+
+// ── Agent Token / Cost Tracking ─────────────────────────
+
+model AgentUsage {
+	id             String   @id @default(cuid())
+	landlordId     String?
+	model          String
+	promptTokens   Int      @default(0)
+	responseTokens Int      @default(0)
+	totalTokens    Int      @default(0)
+	toolCalls      Int      @default(0)
+	taskType       String?  // "tenant-message" | "landlord-assistant" | "utility-check" etc.
+	durationMs     Int      @default(0)
+	createdAt      DateTime @default(now())
+
+	@@index([landlordId])
+	@@index([createdAt])
+}
+
+// ── Green Button Integration ────────────────────────────
+
+model GreenButtonConnection {
+	id             String   @id @default(cuid())
+	provider       String   // "toronto_hydro" | "hydro_one" | "alectra" | "enbridge_gas"
+	utilityType    UtilityType
+	unit           Unit     @relation(fields: [unitId], references: [id])
+	unitId         String
+	landlord       Landlord? @relation(fields: [landlordId], references: [id])
+	landlordId     String?
+	accountNumber  String?  // Customer account number at the provider
+	meterNumber    String?  // Meter ID (optional)
+	// OAuth2 tokens (encrypted)
+	accessToken    String?
+	refreshToken   String?
+	tokenExpiresAt DateTime?
+	// Connection state
+	status         String   @default("pending") // "pending" | "connected" | "error" | "expired"
+	lastSyncAt     DateTime?
+	lastError      String?
+	// Green Button subscription details
+	subscriptionId String?  // Green Button subscription UUID
+	usagePointId   String?  // Green Button usage point href
+	authorizationUrl String? // Stored for re-auth
+	meta           Json?
+	createdAt      DateTime @default(now())
+	updatedAt      DateTime @updatedAt
+
+	@@unique([provider, unitId, utilityType])
+	@@index([landlordId])
+	@@index([status])
 }

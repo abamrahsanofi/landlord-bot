@@ -1,7 +1,49 @@
 import { db } from "../config/database";
 import { Prisma, Priority, MaintenanceStatus, UtilityType } from "@prisma/client";
+import { encrypt, decrypt } from "./encryption";
 
 const isDbEnabled = Boolean(process.env.DATABASE_URL);
+
+// ── Landlord helpers ────────────────────────────────────
+
+export async function findLandlordByWhatsApp(phone: string) {
+  if (!isDbEnabled || !phone) return null;
+  const normalized = phone.replace(/\D/g, "");
+  const withPlus = normalized ? `+${normalized}` : "";
+  const candidates = [phone.trim(), normalized, withPlus].filter(Boolean);
+  try {
+    return await db.landlord.findFirst({
+      where: { whatsappNumbers: { hasSome: candidates } },
+    });
+  } catch (err) {
+    console.warn("find landlord by whatsapp failed", err);
+    return null;
+  }
+}
+
+export async function findLandlordForTenantPhone(phone: string) {
+  if (!isDbEnabled || !phone) return null;
+  const tenant = await findTenantByPhone(phone);
+  if (!tenant?.landlordId) return null;
+  try {
+    return await db.landlord.findUnique({ where: { id: tenant.landlordId } });
+  } catch { return null; }
+}
+
+export async function getLandlordById(id: string) {
+  if (!isDbEnabled || !id) return null;
+  try {
+    return await db.landlord.findUnique({ where: { id }, include: { settings: true } });
+  } catch { return null; }
+}
+
+export async function getLandlordWhatsAppNumbers(landlordId: string): Promise<string[]> {
+  if (!isDbEnabled || !landlordId) return [];
+  try {
+    const landlord = await db.landlord.findUnique({ where: { id: landlordId }, select: { whatsappNumbers: true } });
+    return landlord?.whatsappNumbers || [];
+  } catch { return []; }
+}
 
 type ChatEntry = {
   role: "tenant" | "ai" | "landlord";
@@ -19,8 +61,8 @@ type AutopilotEntry = {
 };
 
 type TriagePayload = Record<string, unknown>;
-type AiDraftPayload = { draft?: string; [key: string]: unknown };
-type UtilityCheckPayload = { anomalyFound?: boolean; notes?: string; [key: string]: unknown };
+type AiDraftPayload = { draft?: string;[key: string]: unknown };
+type UtilityCheckPayload = { anomalyFound?: boolean; notes?: string;[key: string]: unknown };
 
 function normalizeChatLog(log: unknown): ChatEntry[] {
   if (!Array.isArray(log)) return [];
@@ -72,6 +114,7 @@ function buildAutopilotEntry(params: { type: string; message: string; status?: s
 export async function createMaintenanceRequest(params: {
   tenantId?: string;
   unitId?: string;
+  landlordId?: string;
   message: string;
   status?: MaintenanceStatus;
   priority?: Priority;
@@ -95,6 +138,7 @@ export async function createMaintenanceRequest(params: {
       data: {
         tenantId: params.tenantId,
         unitId: params.unitId,
+        landlordId: params.landlordId,
         message: params.message,
         status: params.status || MaintenanceStatus.OPEN,
         priority: params.priority || Priority.NORMAL,
@@ -181,15 +225,17 @@ export async function listMaintenance(params: {
   status?: string | string[];
   unitId?: string;
   tenantId?: string;
+  landlordId?: string;
 }) {
   if (!isDbEnabled) return { items: [], dbEnabled: false };
   const limit = params.limit && params.limit > 0 ? params.limit : 100;
   const statusList = Array.isArray(params.status)
     ? params.status
     : typeof params.status === "string"
-    ? params.status.split(",").map((s) => s.trim()).filter(Boolean)
-    : undefined;
+      ? params.status.split(",").map((s) => s.trim()).filter(Boolean)
+      : undefined;
   const where: Prisma.MaintenanceRequestWhereInput = {};
+  if (params.landlordId) where.landlordId = params.landlordId;
   if (statusList?.length) where.status = { in: statusList as MaintenanceStatus[] };
   if (params.unitId) where.unitId = params.unitId;
   if (params.tenantId) where.tenantId = params.tenantId;
@@ -313,11 +359,24 @@ export async function createUtilityCredential(params: {
   utilityType: UtilityType;
   username?: string;
   password?: string;
+  url?: string;
   notes?: string;
+  landlordId?: string;
 }) {
   if (!isDbEnabled) return null;
   try {
-    return await db.utilityCredential.create({ data: { ...params } });
+    return await db.utilityCredential.create({
+      data: {
+        unitId: params.unitId,
+        utilityType: params.utilityType,
+        username: params.username,
+        password: null, // No longer store plaintext
+        passwordEncrypted: encrypt(params.password),
+        url: params.url,
+        notes: params.notes,
+        landlordId: params.landlordId,
+      },
+    });
   } catch (err) {
     // eslint-disable-next-line no-console
     console.warn("create utility credential failed", err);
@@ -418,6 +477,7 @@ export async function createTenant(params: {
   phone?: string;
   email?: string;
   unitId?: string;
+  landlordId?: string;
   autoReplyEnabled?: boolean;
 }) {
   if (!isDbEnabled) return null;
@@ -428,6 +488,7 @@ export async function createTenant(params: {
         name: params.name,
         phone: params.phone,
         email: params.email,
+        landlordId: params.landlordId,
         autoReplyEnabled: typeof params.autoReplyEnabled === "boolean" ? params.autoReplyEnabled : undefined,
       },
     });
@@ -457,7 +518,7 @@ export async function updateTenantContact(params: { id: string; phone?: string; 
   }
 }
 
-export async function createUnit(params: { id?: string; label: string; address: string }) {
+export async function createUnit(params: { id?: string; label: string; address: string; landlordId?: string }) {
   if (!isDbEnabled) return null;
   try {
     return await db.unit.create({
@@ -465,6 +526,7 @@ export async function createUnit(params: { id?: string; label: string; address: 
         id: params.id,
         label: params.label,
         address: params.address,
+        landlordId: params.landlordId,
       },
     });
   } catch (err) {
@@ -474,10 +536,12 @@ export async function createUnit(params: { id?: string; label: string; address: 
   }
 }
 
-export async function listTenants() {
+export async function listTenants(landlordId?: string) {
   if (!isDbEnabled) return [];
+  const where: Prisma.TenantWhereInput = {};
+  if (landlordId) where.landlordId = landlordId;
   try {
-    return await db.tenant.findMany({ orderBy: { createdAt: "desc" }, include: { units: true } });
+    return await db.tenant.findMany({ where, orderBy: { createdAt: "desc" }, include: { units: true } });
   } catch (err) {
     // eslint-disable-next-line no-console
     console.warn("list tenants failed", err);
@@ -517,10 +581,10 @@ export async function updateTenant(params: {
   }
 }
 
-export async function getGlobalAutoReplyEnabled() {
+export async function getGlobalAutoReplyEnabled(landlordId?: string) {
   if (!isDbEnabled) return { enabled: true, source: "default" as const };
   try {
-    const record = await db.appSetting.findUnique({ where: { key: "global_auto_reply_enabled" } });
+    const record = await db.appSetting.findFirst({ where: { key: "global_auto_reply_enabled", landlordId: landlordId || null } });
     if (!record) return { enabled: true, source: "default" as const };
     return { enabled: record.value !== "false", source: "db" as const };
   } catch (err) {
@@ -530,12 +594,12 @@ export async function getGlobalAutoReplyEnabled() {
   }
 }
 
-export async function setGlobalAutoReplyEnabled(params: { enabled: boolean }) {
+export async function setGlobalAutoReplyEnabled(params: { enabled: boolean; landlordId?: string }) {
   if (!isDbEnabled) return null;
   try {
     return await db.appSetting.upsert({
-      where: { key: "global_auto_reply_enabled" },
-      create: { key: "global_auto_reply_enabled", value: params.enabled ? "true" : "false" },
+      where: { key_landlordId: { key: "global_auto_reply_enabled", landlordId: params.landlordId || "" } },
+      create: { key: "global_auto_reply_enabled", value: params.enabled ? "true" : "false", landlordId: params.landlordId },
       update: { value: params.enabled ? "true" : "false" },
     });
   } catch (err) {
@@ -545,10 +609,10 @@ export async function setGlobalAutoReplyEnabled(params: { enabled: boolean }) {
   }
 }
 
-export async function getGlobalAutoReplyDelayMinutes() {
+export async function getGlobalAutoReplyDelayMinutes(landlordId?: string) {
   if (!isDbEnabled) return { minutes: 5, source: "default" as const };
   try {
-    const record = await db.appSetting.findUnique({ where: { key: "global_auto_reply_delay_minutes" } });
+    const record = await db.appSetting.findFirst({ where: { key: "global_auto_reply_delay_minutes", landlordId: landlordId || null } });
     if (!record) return { minutes: 5, source: "default" as const };
     const parsed = Number(record.value);
     if (Number.isNaN(parsed) || parsed < 0) return { minutes: 5, source: "default" as const };
@@ -560,12 +624,12 @@ export async function getGlobalAutoReplyDelayMinutes() {
   }
 }
 
-export async function setGlobalAutoReplyDelayMinutes(params: { minutes: number }) {
+export async function setGlobalAutoReplyDelayMinutes(params: { minutes: number; landlordId?: string }) {
   if (!isDbEnabled) return null;
   try {
     return await db.appSetting.upsert({
-      where: { key: "global_auto_reply_delay_minutes" },
-      create: { key: "global_auto_reply_delay_minutes", value: String(params.minutes) },
+      where: { key_landlordId: { key: "global_auto_reply_delay_minutes", landlordId: params.landlordId || "" } },
+      create: { key: "global_auto_reply_delay_minutes", value: String(params.minutes), landlordId: params.landlordId },
       update: { value: String(params.minutes) },
     });
   } catch (err) {
@@ -575,10 +639,10 @@ export async function setGlobalAutoReplyDelayMinutes(params: { minutes: number }
   }
 }
 
-export async function getGlobalAutoReplyCooldownMinutes() {
+export async function getGlobalAutoReplyCooldownMinutes(landlordId?: string) {
   if (!isDbEnabled) return { minutes: 60, source: "default" as const };
   try {
-    const record = await db.appSetting.findUnique({ where: { key: "global_auto_reply_cooldown_minutes" } });
+    const record = await db.appSetting.findFirst({ where: { key: "global_auto_reply_cooldown_minutes", landlordId: landlordId || null } });
     if (!record) return { minutes: 60, source: "default" as const };
     const parsed = Number(record.value);
     if (Number.isNaN(parsed) || parsed < 0) return { minutes: 60, source: "default" as const };
@@ -590,12 +654,12 @@ export async function getGlobalAutoReplyCooldownMinutes() {
   }
 }
 
-export async function setGlobalAutoReplyCooldownMinutes(params: { minutes: number }) {
+export async function setGlobalAutoReplyCooldownMinutes(params: { minutes: number; landlordId?: string }) {
   if (!isDbEnabled) return null;
   try {
     return await db.appSetting.upsert({
-      where: { key: "global_auto_reply_cooldown_minutes" },
-      create: { key: "global_auto_reply_cooldown_minutes", value: String(params.minutes) },
+      where: { key_landlordId: { key: "global_auto_reply_cooldown_minutes", landlordId: params.landlordId || "" } },
+      create: { key: "global_auto_reply_cooldown_minutes", value: String(params.minutes), landlordId: params.landlordId },
       update: { value: String(params.minutes) },
     });
   } catch (err) {
@@ -617,7 +681,7 @@ export async function deleteTenant(params: { id: string; hard?: boolean }) {
   }
 }
 
-export async function createContractor(params: { id?: string; name: string; phone: string; email?: string; role?: string }) {
+export async function createContractor(params: { id?: string; name: string; phone: string; email?: string; role?: string; landlordId?: string }) {
   if (!isDbEnabled) return null;
   try {
     return await db.contractor.create({
@@ -627,6 +691,7 @@ export async function createContractor(params: { id?: string; name: string; phon
         phone: params.phone,
         email: params.email,
         role: params.role,
+        landlordId: params.landlordId,
       },
     });
   } catch (err) {
@@ -663,10 +728,12 @@ export async function deleteContractor(params: { id: string; hard?: boolean }) {
   }
 }
 
-export async function listContractors() {
+export async function listContractors(landlordId?: string) {
   if (!isDbEnabled) return [];
+  const where: Prisma.ContractorWhereInput = {};
+  if (landlordId) where.landlordId = landlordId;
   try {
-    return await db.contractor.findMany({ orderBy: { createdAt: "desc" } });
+    return await db.contractor.findMany({ where, orderBy: { createdAt: "desc" } });
   } catch (err) {
     // eslint-disable-next-line no-console
     console.warn("list contractors failed", err);
@@ -674,10 +741,12 @@ export async function listContractors() {
   }
 }
 
-export async function listUnits() {
+export async function listUnits(landlordId?: string) {
   if (!isDbEnabled) return [];
+  const where: Prisma.UnitWhereInput = {};
+  if (landlordId) where.landlordId = landlordId;
   try {
-    return await db.unit.findMany({ orderBy: { createdAt: "desc" } });
+    return await db.unit.findMany({ where, orderBy: { createdAt: "desc" } });
   } catch (err) {
     // eslint-disable-next-line no-console
     console.warn("list units failed", err);
@@ -806,11 +875,13 @@ export async function findLatestMaintenanceForTenantId(tenantId?: string) {
   }
 }
 
-export async function findLatestOpenMaintenance() {
+export async function findLatestOpenMaintenance(landlordId?: string) {
   if (!isDbEnabled) return null;
   try {
+    const where: Prisma.MaintenanceRequestWhereInput = { status: { in: [MaintenanceStatus.OPEN, MaintenanceStatus.IN_PROGRESS] } };
+    if (landlordId) where.landlordId = landlordId;
     return await db.maintenanceRequest.findFirst({
-      where: { status: { in: [MaintenanceStatus.OPEN, MaintenanceStatus.IN_PROGRESS] } },
+      where,
       orderBy: { createdAt: "desc" },
     });
   } catch (err) {
@@ -820,17 +891,38 @@ export async function findLatestOpenMaintenance() {
   }
 }
 
-export async function updateUtilityCredential(params: { id: string; username?: string; password?: string; notes?: string }) {
+export async function updateUtilityCredential(params: { id: string; username?: string; password?: string; url?: string; notes?: string }) {
   if (!isDbEnabled || !params.id) return null;
   const data: Record<string, unknown> = {};
   if (typeof params.username === "string") data.username = params.username;
-  if (typeof params.password === "string") data.password = params.password;
+  if (typeof params.password === "string") {
+    data.password = null; // Clear plaintext
+    data.passwordEncrypted = encrypt(params.password);
+  }
+  if (typeof params.url === "string") data.url = params.url;
   if (typeof params.notes === "string") data.notes = params.notes;
   try {
     return await db.utilityCredential.update({ where: { id: params.id }, data });
   } catch (err) {
     // eslint-disable-next-line no-console
     console.warn("update utility credential failed", err);
+    return null;
+  }
+}
+
+/**
+ * Get the decrypted password for a utility credential.
+ * Handles both legacy plaintext and new encrypted format.
+ */
+export async function getDecryptedUtilityPassword(credentialId: string): Promise<string | null> {
+  if (!isDbEnabled || !credentialId) return null;
+  try {
+    const cred = await db.utilityCredential.findUnique({ where: { id: credentialId } });
+    if (!cred) return null;
+    // Prefer encrypted, fall back to legacy plaintext
+    if (cred.passwordEncrypted) return decrypt(cred.passwordEncrypted);
+    return cred.password || null;
+  } catch {
     return null;
   }
 }
@@ -976,6 +1068,7 @@ export default {
   createUtilityCredential,
   listUtilityCredentials,
   updateUtilityCredential,
+  getDecryptedUtilityPassword,
   deleteUtilityCredential,
   deleteMaintenance,
   getGlobalAutoReplyEnabled,
@@ -984,4 +1077,9 @@ export default {
   setGlobalAutoReplyDelayMinutes,
   getGlobalAutoReplyCooldownMinutes,
   setGlobalAutoReplyCooldownMinutes,
+  // Multi-landlord
+  findLandlordByWhatsApp,
+  findLandlordForTenantPhone,
+  getLandlordById,
+  getLandlordWhatsAppNumbers,
 };

@@ -1,5 +1,26 @@
 version: "3.9"
 services:
+  # ── NestMind AI App ──────────────────────────────────────────
+  app:
+    build: .
+    container_name: nestmind-app
+    restart: unless-stopped
+    depends_on:
+      - postgres
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/landlord?schema=public
+      NODE_ENV: production
+      AGENTIC_MODE: "true"
+      DISPLAY: ":99"
+    # Chrome needs shared memory
+    shm_size: "2gb"
+    volumes:
+      - app_data:/app/data
+
   postgres:
     image: postgres:15
     container_name: landlord-pg
@@ -41,7 +62,7 @@ services:
     depends_on:
       - evolution-redis
       - evolution-postgres
-    entrypoint: ["/bin/sh", "-c", ". ./Docker/scripts/deploy_database.sh && npm run start:prod"]
+    entrypoint: [ "/bin/sh", "-c", ". ./Docker/scripts/deploy_database.sh && npm run start:prod" ]
     ports:
       - "8080:8080"
     volumes:
@@ -62,8 +83,9 @@ services:
       - "3001:80"
     volumes:
       - ./docker/evolution-manager/html/html:/srv:ro
-    command: ["caddy", "file-server", "--root", "/srv", "--listen", ":80"]
+    command: [ "caddy", "file-server", "--root", "/srv", "--listen", ":80" ]
 volumes:
+  app_data:
   pgdata:
   evolution_pgdata:
   evolution_instances:

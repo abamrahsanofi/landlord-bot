@@ -2,6 +2,7 @@ type SendTextParams = {
   to: string;
   text: string;
   session?: string;
+  landlordId?: string;
 };
 
 type SendResult = {
@@ -40,9 +41,15 @@ export function normalizeWhatsAppNumber(raw: string) {
   return trimmed.replace(/\s+/g, "");
 }
 
+/**
+ * Send a WhatsApp text message via Evolution API.
+ * Now accepts optional landlordId for multi-tenant instance routing (future use).
+ */
 export async function sendWhatsAppText(params: SendTextParams): Promise<SendResult> {
   const cfg = getConfig();
   if (!cfg.baseUrl || !cfg.token) {
+    // eslint-disable-next-line no-console
+    console.error("sendWhatsAppText BLOCKED: Evolution API not configured", { baseUrl: Boolean(cfg.baseUrl), token: Boolean(cfg.token) });
     return { ok: false, error: "evolution_api_not_configured" };
   }
   const session = params.session || cfg.session;
@@ -53,6 +60,8 @@ export async function sendWhatsAppText(params: SendTextParams): Promise<SendResu
     session,
   };
   if (cfg.instance) payload.instance = cfg.instance;
+  // eslint-disable-next-line no-console
+  console.info("sendWhatsAppText →", { url, to: payload.number, textLen: (params.text || "").length });
   try {
     const res = await fetch(url, {
       method: "POST",
@@ -64,15 +73,39 @@ export async function sendWhatsAppText(params: SendTextParams): Promise<SendResu
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
+      // eslint-disable-next-line no-console
+      console.error("sendWhatsAppText FAILED", { status: res.status, error: data?.error || data?.message, url });
       return { ok: false, error: data?.error || `send_failed_${res.status}`, response: data };
     }
+    // eslint-disable-next-line no-console
+    console.info("sendWhatsAppText OK", { to: payload.number, status: res.status });
     return { ok: true, response: data };
   } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error("sendWhatsAppText EXCEPTION", { error: (err as Error).message, url });
     return { ok: false, error: (err as Error).message };
+  }
+}
+
+/**
+ * Helper: send a message to all of a landlord's WhatsApp numbers
+ */
+export async function alertLandlord(landlordId: string, text: string): Promise<void> {
+  // Import dynamically to avoid circular deps
+  const { db } = require("../config/database");
+  try {
+    const landlord = await db.landlord.findUnique({ where: { id: landlordId }, select: { whatsappNumbers: true } });
+    if (!landlord?.whatsappNumbers?.length) return;
+    for (const number of landlord.whatsappNumbers) {
+      await sendWhatsAppText({ to: number, text, landlordId });
+    }
+  } catch (err) {
+    console.warn("alertLandlord failed", err); // eslint-disable-line no-console
   }
 }
 
 export default {
   sendWhatsAppText,
   normalizeWhatsAppNumber,
+  alertLandlord,
 };
