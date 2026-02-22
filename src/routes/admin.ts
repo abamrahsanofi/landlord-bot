@@ -299,6 +299,7 @@ router.post("/utilities/credentials/:id/fetch-bill", async (req, res) => {
           );
           // Send credentials + Gemini key + notes via stdin (more secure than command args)
           const geminiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || "";
+          console.log(`[FetchBill] Sending to Python: username=${cred.username ? "YES(" + cred.username.length + " chars)" : "EMPTY"}, password=${password ? "YES(" + password.length + " chars)" : "EMPTY"}, geminiKey=${geminiKey ? "YES" : "EMPTY"}, url=${loginUrl}`); // eslint-disable-line no-console
           child.stdin?.write(JSON.stringify({ username: cred.username, password, geminiKey, notes: cred.notes || "" }));
           child.stdin?.end();
         });
@@ -368,8 +369,8 @@ router.post("/utilities/credentials/:id/fetch-bill", async (req, res) => {
             stepSummary: ucResult.steps || [],
             note: ucResult.ok
               ? (savedBill
-                  ? `Bill of $${(savedBill.amountCents / 100).toFixed(2)} auto-saved to utilities.`
-                  : "Undetected Chrome successfully navigated the portal. Review the data and create a bill from the Bills tab.")
+                ? `Bill of $${(savedBill.amountCents / 100).toFixed(2)} auto-saved to utilities.`
+                : "Undetected Chrome successfully navigated the portal. Review the data and create a bill from the Bills tab.")
               : `Undetected Chrome could not complete login. ${ucResult.error || "Check step details."}`,
           });
         }
@@ -720,8 +721,8 @@ router.post("/utilities/credentials/:id/fetch-bill-2fa", async (req, res) => {
       stepSummary: ucResult.steps || [],
       note: ucResult.ok
         ? (savedBill
-            ? `2FA verification successful! Bill of $${(savedBill.amountCents / 100).toFixed(2)} auto-saved to utilities.`
-            : "2FA verification successful! Review the data and create a bill from the Bills tab.")
+          ? `2FA verification successful! Bill of $${(savedBill.amountCents / 100).toFixed(2)} auto-saved to utilities.`
+          : "2FA verification successful! Review the data and create a bill from the Bills tab.")
         : `2FA verification completed but could not extract bill data. ${ucResult.error || "Check step details."}`,
     });
   } catch (err) {

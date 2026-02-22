@@ -40,8 +40,11 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 
 # ── Human-like helpers ───────────────────────────────────────
 
+# Speed multiplier for all delays (lower = faster, 1.0 = original)
+_DELAY_MULT = 0.4
+
 def random_delay(min_s=1.0, max_s=3.0):
-    time.sleep(min_s + random.random() * (max_s - min_s))
+    time.sleep((min_s + random.random() * (max_s - min_s)) * _DELAY_MULT)
 
 
 def human_type(element, text, min_delay=0.04, max_delay=0.12):
@@ -55,18 +58,143 @@ def human_type(element, text, min_delay=0.04, max_delay=0.12):
             time.sleep(min_delay + random.random() * (max_delay - min_delay))
 
 
+def _js_set_value(driver, element, text):
+    """Set input value via JavaScript and dispatch events — works for Angular/React/ASP.NET forms."""
+    driver.execute_script("""
+        var el = arguments[0];
+        var val = arguments[1];
+        // Focus the element first (important for ASP.NET validators)
+        el.focus();
+        // Use native setter to bypass framework wrappers
+        var nativeSetter = Object.getOwnPropertyDescriptor(
+            window.HTMLInputElement.prototype, 'value'
+        );
+        if (nativeSetter && nativeSetter.set) {
+            nativeSetter.set.call(el, val);
+        } else {
+            el.value = val;
+        }
+        // Dispatch comprehensive events for all frameworks
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+        el.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
+        el.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true }));
+        // Angular-specific: ngModel listens on 'input' and 'compositionend'
+        el.dispatchEvent(new Event('compositionend', { bubbles: true }));
+        // ASP.NET: blur triggers validation + ensures value is committed
+        el.dispatchEvent(new Event('blur', { bubbles: true }));
+    """, element, text)
+
+
+def robust_type(driver, element, text, dbg_fn=None):
+    """Type into an element with verification. Falls back to JS if send_keys fails.
+    Returns True if the field was successfully filled."""
+    label = ""
+    try:
+        label = element.get_attribute("name") or element.get_attribute("id") or element.get_attribute("type") or "?"
+    except Exception:
+        pass
+
+    # Strategy 1: Click + clear + human_type (send_keys char by char)
+    try:
+        human_click(driver, element)
+        time.sleep(0.3)
+        element.clear()
+        time.sleep(0.2)
+        human_type(element, text)
+        time.sleep(0.5)
+    except Exception as e:
+        if dbg_fn:
+            dbg_fn(f"  human_type failed for [{label}]: {e}")
+
+    # Check if value was set
+    current = ""
+    try:
+        current = element.get_attribute("value") or ""
+    except Exception:
+        pass
+
+    if current == text:
+        if dbg_fn:
+            dbg_fn(f"  Field [{label}] filled OK via send_keys (len={len(current)})")
+        return True
+
+    if dbg_fn:
+        dbg_fn(f"  Field [{label}] has value '{current[:20]}...' (expected len={len(text)}) — trying JS fallback")
+
+    # Strategy 2: JavaScript native setter + event dispatch
+    try:
+        element.clear()
+        time.sleep(0.2)
+        _js_set_value(driver, element, text)
+        time.sleep(0.5)
+    except Exception as e:
+        if dbg_fn:
+            dbg_fn(f"  JS setValue failed for [{label}]: {e}")
+
+    # Verify again
+    try:
+        current = element.get_attribute("value") or ""
+    except Exception:
+        current = ""
+
+    if current == text:
+        if dbg_fn:
+            dbg_fn(f"  Field [{label}] filled OK via JS fallback (len={len(current)})")
+        return True
+
+    # Strategy 3: Select all + delete + type slowly
+    if dbg_fn:
+        dbg_fn(f"  Field [{label}] still '{current[:20]}...' — trying select-all + retype")
+    try:
+        from selenium.webdriver.common.keys import Keys
+        element.click()
+        time.sleep(0.2)
+        element.send_keys(Keys.CONTROL + "a")
+        time.sleep(0.1)
+        element.send_keys(Keys.DELETE)
+        time.sleep(0.2)
+        element.send_keys(text)
+        time.sleep(0.5)
+    except Exception as e:
+        if dbg_fn:
+            dbg_fn(f"  Select-all retype failed: {e}")
+
+    try:
+        current = element.get_attribute("value") or ""
+    except Exception:
+        current = ""
+
+    if current == text:
+        if dbg_fn:
+            dbg_fn(f"  Field [{label}] filled OK via select-all retype (len={len(current)})")
+        return True
+
+    if dbg_fn:
+        dbg_fn(f"  WARNING: Field [{label}] may not be filled correctly (got '{current[:30]}', wanted len={len(text)})")
+    return len(current) > 0  # Partial success if something was typed
+
+
 def human_click(driver, element):
-    """Click an element using ActionChains with a slight offset (not dead-center)."""
+    """Click an element using ActionChains with a slight offset (not dead-center).
+    Falls back to JS click if ActionChains fails."""
     from selenium.webdriver.common.action_chains import ActionChains
     size = element.size
     # Random offset within the element — humans never click exact center
     x_off = random.randint(-max(1, size["width"] // 4), max(1, size["width"] // 4))
     y_off = random.randint(-max(1, size["height"] // 4), max(1, size["height"] // 4))
-    ac = ActionChains(driver)
-    ac.move_to_element_with_offset(element, x_off, y_off)
-    ac.pause(0.1 + random.random() * 0.2)
-    ac.click()
-    ac.perform()
+    try:
+        ac = ActionChains(driver)
+        ac.move_to_element_with_offset(element, x_off, y_off)
+        ac.pause(0.1 + random.random() * 0.2)
+        ac.click()
+        ac.perform()
+    except Exception:
+        # Fallback: JS click (triggers jQuery/addEventListener handlers too)
+        try:
+            driver.execute_script("arguments[0].click()", element)
+        except Exception:
+            element.click()
 
 
 def random_mouse_wander(driver, steps=3):
@@ -167,7 +295,7 @@ def main():
     parser.add_argument("--debug", action="store_true", help="Verbose stderr output")
     parser.add_argument("--gemini-key", required=False, help="Gemini API key for LLM reasoning")
     parser.add_argument("--gemini-model", default="gemini-2.5-flash", help="Gemini model name")
-    parser.add_argument("--max-llm-steps", type=int, default=20, help="Max LLM reasoning steps")
+    parser.add_argument("--max-llm-steps", type=int, default=8, help="Max LLM reasoning steps")
     # 2FA resume mode
     parser.add_argument("--resume", action="store_true", help="Resume a 2FA session")
     parser.add_argument("--session-file", required=False, help="Path to saved session cookies")
@@ -190,6 +318,13 @@ def main():
     # Also check env var for API key
     if not gemini_key:
         gemini_key = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY") or ""
+
+    # Debug: log credential presence (masked for security)
+    dbg = lambda msg: sys.stderr.write(f"[fetchBill] {msg}\n") if args.debug else None
+    dbg(f"Credentials received: username={'YES ('+str(len(username or ''))+' chars)' if username else 'EMPTY'}, "
+        f"password={'YES ('+str(len(password or ''))+' chars)' if password else 'EMPTY'}, "
+        f"gemini_key={'YES' if gemini_key else 'EMPTY'}, "
+        f"notes='{(account_hint or '')[:30]}'")
 
     if not args.resume and (not username or not password):
         print(json.dumps({"ok": False, "error": "Username and password required"}))
@@ -374,7 +509,7 @@ def main():
             login_success = _do_login(driver, username, password, args, result, add_step, dbg, gemini_key)
 
         # ── Detect 2FA page after login ───────────────────────
-        if not args.resume:
+        if not args.resume and login_success:
             body_text = _safe_body_text(driver)
             is_2fa = _detect_2fa_page(body_text, driver)
 
@@ -602,9 +737,11 @@ def _get_page_context(driver):
         }
 
 
-def _ask_gemini(model, screenshot_b64, page_context, step_num, account_hint=""):
+def _ask_gemini(model, screenshot_b64, page_context, step_num, account_hint="", dbg=None):
     """Ask Gemini to analyze the page and decide what to do next.
     Returns a dict with: action, target, reasoning, done, billingData."""
+    if dbg is None:
+        dbg = lambda msg: None  # no-op if not provided
 
     account_section = ""
     if account_hint:
@@ -615,39 +752,37 @@ If you see multiple accounts on this page, you MUST select the one matching this
 Click on the account that contains this number or matches this description before navigating to billing.
 """
 
-    prompt = f"""You are a billing extraction agent navigating a utility provider's portal (e.g., Rogers, Bell, Enbridge, Toronto Hydro).
-You have successfully logged in. Your goal is to find the billing page and extract the latest bill information.
+    prompt = f"""You are a billing extraction agent on a utility provider's portal.
+You are already logged in. Your ONLY goal is to extract the latest bill amount and due date.
 {account_section}
-Current page context:
+Current page:
 - URL: {page_context['url']}
 - Title: {page_context['title']}
 - Step: {step_num}
 
-Navigation items visible: {json.dumps(page_context.get('navItems', []))}
-
-Clickable elements (index, tag, text, href):
-{json.dumps(page_context.get('clickableElements', [])[:40], indent=2)}
-
 Page text (first 4000 chars):
 {page_context.get('bodyText', '')[:4000]}
 
-INSTRUCTIONS:
-1. Analyze the page and determine if billing/bill information is visible.
-2. If you can already see bill amounts, dates, and account info, extract them.
-3. If you see multiple accounts, select the one matching the target account above.
-4. If not on a billing page, decide which element to click to navigate to the billing page.
-5. Look for links/buttons with words like: "Bill", "Billing", "Account", "Overview",
-   "Payment", "Statement", "My Bill", "View Bill", "Balance", "Facture".
+Clickable elements (index, tag, text, href):
+{json.dumps(page_context.get('clickableElements', [])[:30], indent=2)}
 
-Respond with EXACTLY this JSON format (no markdown, no code blocks):
+CRITICAL RULES:
+1. EXTRACT FIRST: If you see ANY dollar amounts or dates on this page, set "done": true and extract them immediately. Do NOT navigate away.
+2. The account overview/dashboard page usually already shows the bill amount and due date. LOOK CAREFULLY at the page text above.
+3. Only click to navigate if there are absolutely NO amounts visible on the current page.
+4. Never click more than 2 times total. If after 2 clicks you still don't see billing data, extract whatever you can see.
+5. DO NOT click on individual bills, statements, or PDF links — just read the amounts from the page.
+6. Look for patterns like "$123.45", "Amount Due", "Balance", "Payment Due", "Due Date" in the page text.
+
+Respond with EXACTLY this JSON (no markdown, no code blocks):
 {{
-  "reasoning": "Brief explanation of what you see and what to do",
+  "reasoning": "Brief explanation",
   "done": true/false,
-  "action": "click" or "navigate" or "extract" or "scroll",
-  "targetIndex": <index of clickable element to click, or -1>,
-  "targetText": "<exact visible text of the element to click, for fallback matching>",
-  "targetCssSelector": "<CSS selector to find the element, e.g. 'div.account-card', 'li:nth-child(2)'>",
-  "targetUrl": "<URL to navigate to, if action is navigate>",
+  "action": "click" or "extract" or "scroll",
+  "targetIndex": <index of clickable element, or -1>,
+  "targetText": "<element text for fallback>",
+  "targetCssSelector": "<CSS selector fallback>",
+  "targetUrl": "",
   "billingData": {{
     "totalAmountDue": "$XX.XX or null",
     "dueDate": "date string or null",
@@ -661,10 +796,6 @@ Respond with EXACTLY this JSON format (no markdown, no code blocks):
   }}
 }}
 
-IMPORTANT: When you want to click something, ALWAYS provide targetText (exact visible text) and targetCssSelector as fallbacks.
-If the element you want to click is not in the clickable elements list, set targetIndex to -1 and rely on targetText/targetCssSelector.
-If billing data is visible on this page, set "done": true and fill in billingData.
-If you need to navigate more, set "done": false and specify the click action.
 Output ONLY the JSON object, nothing else."""
 
     try:
@@ -1059,10 +1190,11 @@ def _llm_reasoning_loop(driver, api_key, model_name, max_steps, add_step, dbg, a
     dbg(f"LLM reasoning agent started (model={model_name}, max_steps={max_steps})")
     extracted = {"amounts": [], "dates": [], "billingData": None, "error": None}
 
-    # Wait for SPA content to fully render before starting LLM navigation
-    for _spa_wait in range(5):
+    # Wait for SPA content to render — but don't wait too long for SPA sites
+    # that load content into Shadow DOM (body text stays short)
+    for _spa_wait in range(3):
         body = _safe_body_text(driver)
-        if len(body) > 2000:
+        if len(body) > 800:
             break
         dbg(f"  Waiting for page content to load ({len(body)} chars)...")
         random_delay(3.0, 5.0)
@@ -1077,7 +1209,7 @@ def _llm_reasoning_loop(driver, api_key, model_name, max_steps, add_step, dbg, a
         context = _get_page_context(driver)
 
         # Ask LLM
-        llm_response = _ask_gemini(model, screenshot, context, step + 1, account_hint)
+        llm_response = _ask_gemini(model, screenshot, context, step + 1, account_hint, dbg=dbg)
 
         reasoning = llm_response.get("reasoning", "No reasoning")
         add_step("llm_think", f"LLM step {step + 1}: {reasoning[:150]}")
@@ -1341,12 +1473,7 @@ def _llm_assisted_login(driver, model, username, password, add_step, dbg):
         if field:
             add_step("type", f"LLM: Entering username into {user_info.get('description', 'field')[:60]}")
             try:
-                human_click(driver, field)
-                random_delay(0.3, 0.6)
-                field.clear()
-                random_delay(0.2, 0.4)
-                human_type(field, username)
-                username_entered = True
+                username_entered = robust_type(driver, field, username, dbg)
                 random_delay(0.8, 1.5)
             except Exception as e:
                 dbg(f"  Failed to type username: {e}")
@@ -1371,11 +1498,7 @@ def _llm_assisted_login(driver, model, username, password, add_step, dbg):
         if field:
             add_step("type", "LLM: Entering password")
             try:
-                human_click(driver, field)
-                random_delay(0.3, 0.6)
-                field.clear()
-                human_type(field, password)
-                password_entered = True
+                password_entered = robust_type(driver, field, password, dbg)
                 random_delay(0.8, 1.5)
             except Exception as e:
                 dbg(f"  Failed to type password: {e}")
@@ -1514,7 +1637,7 @@ def _do_login(driver, username, password, args, result, add_step, dbg, gemini_ke
         # Log what's on the page for debugging
         _find_inputs_via_js(driver, dbg)
 
-    for attempt in range(8):
+    for attempt in range(5):
         dbg(f"Login attempt {attempt + 1}")
         random_delay(0.5, 1.0)
 
@@ -1621,30 +1744,37 @@ def _do_login(driver, username, password, args, result, add_step, dbg, gemini_ke
             field = user_fields[0]
             label = field.get_attribute("name") or field.get_attribute("id") or "text"
             add_step("type", f"Typing username into [{label}]")
-            human_click(driver, field)
-            random_delay(0.4, 0.9)
-            field.clear()
-            random_delay(0.2, 0.4)
-            human_type(field, username)
+            filled = robust_type(driver, field, username, dbg)
+            if not filled:
+                dbg(f"  WARNING: Username field [{label}] may not have been filled!")
             random_delay(1.0, 2.0)
             random_mouse_wander(driver, 2)
             random_delay(0.5, 1.0)
 
             # Always try to click the login/continue button — never just press Enter
             btn = _find_action_button(driver, ["continue", "next", "sign in", "log in", "login", "submit", "suivant", "connexion"])
-            if btn:
-                add_step("click", f"Clicking '{btn.text.strip() or 'Continue'}'")
-                human_click(driver, btn)
-            else:
-                # Last resort: try to find ANY visible button at all
+            if not btn:
                 dbg("  No named button found — looking for any visible button")
-                any_btn = _find_any_visible_submit(driver)
-                if any_btn:
-                    add_step("click", f"Clicking fallback button '{any_btn.text.strip() or 'Submit'}'")
-                    human_click(driver, any_btn)
-                else:
-                    add_step("press_key", "No login button found — pressing Enter as last resort")
-                    field.send_keys(Keys.ENTER)
+                btn = _find_any_visible_submit(driver)
+
+            if btn:
+                btn_label = (btn.text or "").strip() or "Continue"
+                pre_click_url = driver.current_url
+                add_step("click", f"Clicking '{btn_label}'")
+                human_click(driver, btn)
+                random_delay(2.0, 3.0)
+
+                # If page didn't change, fallback to JS click
+                post_click_url = driver.current_url
+                if post_click_url == pre_click_url:
+                    dbg("  Page didn't change after click — trying JS .click()")
+                    try:
+                        driver.execute_script("arguments[0].click()", btn)
+                    except Exception:
+                        pass
+            else:
+                add_step("press_key", "No login button found — pressing Enter as last resort")
+                field.send_keys(Keys.ENTER)
 
             random_delay(3.0, 6.0)
             try:
@@ -1667,36 +1797,113 @@ def _do_login(driver, username, password, args, result, add_step, dbg, gemini_ke
                 uf = user_fields[0]
                 if not (uf.get_attribute("value") or "").strip():
                     add_step("type", "Entering username")
-                    human_click(driver, uf)
-                    random_delay(0.3, 0.6)
-                    uf.clear()
-                    human_type(uf, username)
+                    filled = robust_type(driver, uf, username, dbg)
+                    if not filled:
+                        dbg("  WARNING: Username field may not have been filled!")
                     random_delay(0.8, 1.5)
 
             pf = pass_fields[0]
             add_step("type", "Entering password")
-            human_click(driver, pf)
-            random_delay(0.3, 0.8)
-            pf.clear()
-            human_type(pf, password)
+            filled = robust_type(driver, pf, password, dbg)
+            if not filled:
+                dbg("  WARNING: Password field may not have been filled!")
             random_delay(1.0, 2.0)
             random_mouse_wander(driver, 2)
             random_delay(0.5, 1.0)
 
+            # ── PRE-SUBMIT: Verify fields still have values (page JS might clear them) ──
+            if has_user:
+                uf_val = (user_fields[0].get_attribute("value") or "").strip()
+                if not uf_val:
+                    dbg("  Username field was CLEARED by page — re-typing")
+                    robust_type(driver, user_fields[0], username, dbg)
+                    random_delay(0.5, 1.0)
+                else:
+                    dbg(f"  Username field verified: {len(uf_val)} chars")
+            pf_val = (pf.get_attribute("value") or "").strip()
+            if not pf_val:
+                dbg("  Password field was CLEARED by page — re-typing")
+                robust_type(driver, pf, password, dbg)
+                random_delay(0.5, 1.0)
+            else:
+                dbg(f"  Password field verified: {len(pf_val)} chars")
+
             # Always try to click the login/sign-in button — do NOT press Enter
             btn = _find_action_button(driver, ["sign in", "log in", "login", "submit", "continue", "connexion", "se connecter"])
-            if btn:
-                add_step("click", f"Clicking '{btn.text.strip() or 'Sign In'}'")
-                human_click(driver, btn)
-            else:
-                # Last resort: try any visible submit-like button
+            if not btn:
                 dbg("  No named login button found — looking for any submit button")
-                any_btn = _find_any_visible_submit(driver)
-                if any_btn:
-                    add_step("click", f"Clicking fallback button '{any_btn.text.strip() or 'Submit'}'")
-                    human_click(driver, any_btn)
-                else:
-                    add_step("press_key", "No login button found — pressing Enter as last resort")
+                btn = _find_any_visible_submit(driver)
+
+            if btn:
+                btn_id = btn.get_attribute("id") or ""
+                btn_label = (btn.text or "").strip() or "Sign In"
+                pre_click_url = driver.current_url
+                dbg(f"  Found button: tag={btn.tag_name}, id='{btn_id}', text='{btn_label}'")
+                add_step("click", f"Clicking '{btn_label}'")
+                human_click(driver, btn)
+                random_delay(3.0, 5.0)
+
+                # Check if page actually changed — if not, the JS handler might not have fired
+                post_click_url = driver.current_url
+                still_pass = driver.find_elements(By.CSS_SELECTOR, 'input[type="password"]')
+                still_pass = [f for f in still_pass if f.is_displayed()]
+                if post_click_url == pre_click_url and still_pass:
+                    dbg("  Page didn't change after human_click — trying JS .click()")
+                    try:
+                        driver.execute_script("arguments[0].click()", btn)
+                        random_delay(3.0, 5.0)
+                    except Exception:
+                        pass
+
+                    # Check again
+                    post_js_url = driver.current_url
+                    still_pass2 = driver.find_elements(By.CSS_SELECTOR, 'input[type="password"]')
+                    still_pass2 = [f for f in still_pass2 if f.is_displayed()]
+                    if post_js_url == pre_click_url and still_pass2:
+                        # Try jQuery trigger (for externally-bound handlers like ASP.NET + jQuery)
+                        dbg("  JS click also didn't work — trying jQuery trigger")
+                        try:
+                            driver.execute_script("""
+                                if (typeof jQuery !== 'undefined') {
+                                    jQuery(arguments[0]).trigger('click');
+                                } else if (typeof $ !== 'undefined') {
+                                    $(arguments[0]).trigger('click');
+                                }
+                            """, btn)
+                            random_delay(3.0, 5.0)
+                        except Exception:
+                            pass
+
+                        # Last check before form.submit() fallback
+                        post_jq_url = driver.current_url
+                        still_pass3 = driver.find_elements(By.CSS_SELECTOR, 'input[type="password"]')
+                        still_pass3 = [f for f in still_pass3 if f.is_displayed()]
+                        if post_jq_url == pre_click_url and still_pass3:
+                            dbg("  All click methods failed — trying form.submit()")
+                            try:
+                                driver.execute_script("""
+                                    var form = document.querySelector('form');
+                                    if (form) form.submit();
+                                """)
+                                add_step("submit", "Submitted login form via JavaScript")
+                            except Exception:
+                                dbg("  form.submit() failed, pressing Enter")
+                                pf.send_keys(Keys.ENTER)
+            else:
+                # No button found at all
+                dbg("  No button found — trying form.submit() via JS")
+                try:
+                    submitted = driver.execute_script("""
+                        var form = document.querySelector('form');
+                        if (form) { form.submit(); return true; }
+                        return false;
+                    """)
+                    if submitted:
+                        add_step("submit", "Submitted form via JavaScript")
+                    else:
+                        add_step("press_key", "No form found — pressing Enter as last resort")
+                        pf.send_keys(Keys.ENTER)
+                except Exception:
                     pf.send_keys(Keys.ENTER)
 
             random_delay(5.0, 8.0)
@@ -1833,7 +2040,7 @@ def _post_login_settle(driver, add_step, dbg):
     dbg("Post-login settle: waiting for page transition...")
     random_delay(3.0, 5.0)
 
-    for check in range(5):
+    for check in range(3):
         body = _safe_body_text(driver)
         url = driver.current_url
         dbg(f"  Post-login check {check + 1}: url={url[:80]}, body_len={len(body)}")
@@ -1926,31 +2133,28 @@ def _post_login_settle(driver, add_step, dbg):
                            "my account", "account overview"]
         # Only treat as portal if NOT still showing login fields AND page has real content
         if not still_login and any(kw in lower for kw in portal_keywords):
-            # SPA check: if body is very short, the page hasn't rendered yet
-            if len(body) < 1500:
-                dbg(f"  Portal keywords found but body too short ({len(body)} chars) — SPA still loading")
+            # SPA pages (Rogers, etc.) may show portal keywords in a skeleton
+            # with very little body text. Wait briefly but don't loop forever.
+            if len(body) < 500 and check < 2:
+                dbg(f"  Portal keywords found but body very short ({len(body)} chars) — waiting briefly")
                 random_delay(3.0, 5.0)
-                # Re-check after wait
                 body = _safe_body_text(driver)
                 lower = body.lower()
                 dbg(f"  After extra wait: body_len={len(body)}")
-                if len(body) < 1500:
-                    # Still loading — keep checking
-                    if check < 4:
-                        random_delay(3.0, 5.0)
-                        continue
+                if len(body) < 500:
+                    continue
 
             dbg("  Reached portal/account page")
             add_step("done", "Portal page loaded after login")
             return
 
         # ── Still on feedback/verification/loading page — try reloading ──
-        if check == 2:
+        if check == 1:
             dbg("  Page seems stuck, trying page reload...")
             add_step("navigate", "Reloading page (stuck after login)")
             driver.refresh()
             random_delay(4.0, 6.0)
-        elif check == 3:
+        elif check == 2:
             # Try navigating to the account overview directly
             base_url = url.split("#")[0].split("?")[0]
             if "rogers" in base_url.lower():
@@ -1968,15 +2172,66 @@ def _post_login_settle(driver, add_step, dbg):
 
 
 def _detect_2fa_page(body_text, driver):
-    """Check if the current page is a 2FA / verification code page."""
+    """Check if the current page is a 2FA / verification code page.
+    Requires BOTH keyword match AND a visible code input field to avoid
+    false positives from reCAPTCHA or login validation text."""
+    from selenium.webdriver.common.by import By
     lower = body_text.lower()
+
+    # Exclude pages that mention captcha/recaptcha — those are NOT 2FA
+    captcha_indicators = ["recaptcha", "captcha", "i'm not a robot", "i am not a robot"]
+    if any(ci in lower for ci in captcha_indicators):
+        # Only proceed if there are STRONG 2FA signals alongside captcha
+        pass  # fall through to keyword + field check below
+
     tfa_keywords = [
         "verification code", "verify your identity", "two-factor",
         "2-step verification", "security code", "one-time code",
         "receive a code", "receive verification", "enter the code",
         "we sent a code", "confirm your identity", "multi-factor",
+        "enter code", "code sent", "we texted", "we emailed",
     ]
-    return any(kw in lower for kw in tfa_keywords)
+    has_keyword = any(kw in lower for kw in tfa_keywords)
+    if not has_keyword:
+        return False
+
+    # Verify there's actually a code input field visible (short text/number input)
+    # A real 2FA page has a visible input for the verification code
+    try:
+        # Look for visible text/number/tel inputs that could be code fields
+        code_inputs = driver.find_elements(By.CSS_SELECTOR,
+            'input[type="text"], input[type="number"], input[type="tel"], '
+            'input[inputmode="numeric"], input[autocomplete="one-time-code"]'
+        )
+        visible_code = []
+        for inp in code_inputs:
+            if not inp.is_displayed():
+                continue
+            # Skip if it looks like a username/email/password/search field
+            name = (inp.get_attribute("name") or "").lower()
+            inp_id = (inp.get_attribute("id") or "").lower()
+            inp_type = (inp.get_attribute("type") or "").lower()
+            placeholder = (inp.get_attribute("placeholder") or "").lower()
+            skip_names = ["user", "email", "login", "search", "password", "captcha"]
+            if any(s in name or s in inp_id or s in placeholder for s in skip_names):
+                continue
+            # If it's a password field, skip
+            if inp_type == "password":
+                continue
+            visible_code.append(inp)
+
+        if not visible_code:
+            # No code input found — probably not a real 2FA page
+            # Could be reCAPTCHA text or ASP.NET validation text
+            return False
+    except Exception:
+        # If we can't check inputs, be conservative and rely on keywords only
+        # with stricter keyword matching
+        strict_keywords = ["verification code", "2-step verification", "two-factor",
+                          "we sent a code", "enter the code", "one-time code"]
+        return any(kw in lower for kw in strict_keywords)
+
+    return True
 
 
 def _click_2fa_channel(driver, add_step, dbg, prefer="text"):
@@ -2100,10 +2355,18 @@ def _find_action_button(driver, keywords):
     from selenium.webdriver.common.by import By
 
     # 1. Explicit submit inputs inside forms
-    for sel in ['button[type="submit"]', 'input[type="submit"]']:
+    for sel in ['button[type="submit"]', 'input[type="submit"]', 'input[type="button"]']:
         btns = driver.find_elements(By.CSS_SELECTOR, sel)
+        for b in btns:
+            if not b.is_displayed():
+                continue
+            # For input[type="button"], check value against keywords
+            val = (b.get_attribute("value") or b.text or "").lower().strip()
+            if any(kw in val for kw in keywords):
+                return b
+        # For submit buttons without keyword check (first match), only if type=submit
         visible = [b for b in btns if b.is_displayed()]
-        if visible:
+        if visible and sel in ['button[type="submit"]', 'input[type="submit"]']:
             return visible[0]
 
     # 2. Scan <button> elements by text or aria-label
@@ -2158,7 +2421,28 @@ def _find_action_button(driver, keywords):
 
 
 def _safe_body_text(driver):
-    """Get page body text safely."""
+    """Get page body text safely, including Shadow DOM content for SPA pages."""
+    try:
+        # First try JS innerText which includes more rendered content
+        text = driver.execute_script("""
+            // Traverse shadow DOMs to get all text
+            function getAllText(root) {
+                var text = '';
+                if (root.innerText) text += root.innerText;
+                root.querySelectorAll('*').forEach(function(el) {
+                    if (el.shadowRoot) {
+                        text += ' ' + getAllText(el.shadowRoot);
+                    }
+                });
+                return text;
+            }
+            return getAllText(document.body);
+        """) or ""
+        if len(text) > 100:
+            return text
+    except Exception:
+        pass
+    # Fallback to simple body.text
     try:
         from selenium.webdriver.common.by import By
         return driver.find_element(By.TAG_NAME, "body").text or ""
