@@ -5,6 +5,43 @@ import { db } from "../config/database";
 import { signToken, requireAuth, AuthRequest } from "../middleware/auth";
 import { PLANS } from "../services/planService";
 
+// ── Evolution API helper (instance auto-creation on signup) ──
+async function createEvolutionInstance(instanceName: string, webhookUrl: string) {
+    const baseUrl = (process.env.EVOLUTION_API_BASE_URL || "").replace(/\/+$/, "");
+    const token = (process.env.EVOLUTION_API_TOKEN || "").trim();
+    const tokenHeader = (process.env.EVOLUTION_API_TOKEN_HEADER || "apikey").trim();
+    if (!baseUrl || !token) return null; // Evolution not configured — skip silently
+
+    try {
+        const res = await fetch(`${baseUrl}/instance/create`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", [tokenHeader]: token },
+            body: JSON.stringify({
+                instanceName,
+                integration: "WHATSAPP-BAILEYS",
+                qrcode: true,
+                rejectCall: false,
+                groupsIgnore: true,
+                alwaysOnline: true,
+                readMessages: true,
+                readStatus: true,
+                syncFullHistory: false,
+                webhook: {
+                    url: webhookUrl,
+                    byEvents: false,
+                    base64: true,
+                    events: ["MESSAGES_UPSERT", "MESSAGES_UPDATE", "CONNECTION_UPDATE", "QRCODE_UPDATED"],
+                },
+            }),
+        });
+        const data = await res.json().catch(() => ({}));
+        return res.ok ? data : null;
+    } catch (err) {
+        console.error("Evolution API instance creation failed (non-blocking):", (err as Error).message);
+        return null;
+    }
+}
+
 const router = express.Router();
 
 const signupSchema = z.object({
@@ -56,6 +93,18 @@ router.post("/signup", async (req, res) => {
                 cooldownMinutes: 60,
             },
         });
+
+        // Auto-create Evolution API instance for WhatsApp (non-blocking)
+        const instanceName = `nestmind-${landlord.id}`;
+        const appUrl = process.env.APP_PUBLIC_URL || process.env.APP_URL || `${req.protocol}://${req.get("host")}`;
+        const webhookUrl = `${appUrl}/webhooks/whatsapp/evolution`;
+        const evoResult = await createEvolutionInstance(instanceName, webhookUrl);
+        if (evoResult?.instance?.instanceName) {
+            await db.landlord.update({
+                where: { id: landlord.id },
+                data: { evolutionInstanceName: evoResult.instance.instanceName },
+            });
+        }
 
         const token = signToken(landlord.id);
         const plan = PLANS[landlord.plan];

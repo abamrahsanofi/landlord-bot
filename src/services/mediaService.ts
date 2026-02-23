@@ -182,9 +182,10 @@ function extractFileName(payload: any): string {
  * Evolution v2 endpoint: POST /chat/getBase64FromMediaMessage/{instance}
  * Requires the full message object (key + message with mediaKey/directPath).
  */
-async function downloadFromEvolution(messageId: string, payload: any): Promise<{ base64: string; mimeType: string } | null> {
+async function downloadFromEvolution(messageId: string, payload: any, instanceName?: string): Promise<{ base64: string; mimeType: string } | null> {
     const cfg = getEvolutionConfig();
-    if (!cfg.baseUrl || !cfg.token || !cfg.instance) return null;
+    const instance = instanceName || cfg.instance;
+    if (!cfg.baseUrl || !cfg.token || !instance) return null;
 
     const data = payload?.data || payload;
     const key = data?.key;
@@ -194,7 +195,7 @@ async function downloadFromEvolution(messageId: string, payload: any): Promise<{
     const message = data?.message;
 
     try {
-        const url = `${cfg.baseUrl}/chat/getBase64FromMediaMessage/${cfg.instance}`;
+        const url = `${cfg.baseUrl}/chat/getBase64FromMediaMessage/${instance}`;
         const requestBody: any = {
             message: { key },
         };
@@ -405,7 +406,7 @@ async function analyzeVideo(base64: string, mimeType: string, context?: string):
  *  3. Run appropriate AI analysis (vision/transcription/video)
  *  4. Return structured result
  */
-export async function processMedia(payload: any, textContext?: string): Promise<ExtractedMedia | null> {
+export async function processMedia(payload: any, textContext?: string, instanceName?: string): Promise<ExtractedMedia | null> {
     const mediaType = detectMediaType(payload);
     if (mediaType === "unknown") return null;
 
@@ -414,7 +415,7 @@ export async function processMedia(payload: any, textContext?: string): Promise<
     if (!mediaData) {
         const messageId = extractMediaMessageId(payload);
         if (messageId) {
-            mediaData = await downloadFromEvolution(messageId, payload);
+            mediaData = await downloadFromEvolution(messageId, payload, instanceName);
         }
     }
 

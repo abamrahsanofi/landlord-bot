@@ -721,3 +721,88 @@ export function greenButtonTool(): ToolDefinition {
         },
     };
 }
+
+// ═══════════════════════════════════════════════════════════
+//  TENANT-FACING TOOLS — Limited subset for tenant interactions
+// ═══════════════════════════════════════════════════════════
+
+/**
+ * Tool for tenants to check the status of their maintenance requests.
+ * Only returns data that belongs to the requesting tenant.
+ */
+export function checkMyRequestStatusTool(): ToolDefinition {
+    return {
+        name: "check_my_request_status",
+        description: "Check the status of the tenant's maintenance requests. Returns a list of their recent requests with current status, severity, and any AI-drafted responses. Use the tenant's phone number from context.",
+        parameters: {
+            tenantPhone: { type: "string", description: "The tenant's phone number (from conversation context)" },
+        },
+        required: ["tenantPhone"],
+        category: "data",
+        enabled: true,
+        async execute(args) {
+            const phone = String(args.tenantPhone).trim();
+            if (!phone) return { error: "Tenant phone number is required" };
+
+            const tenant = await repo.findTenantByPhone(phone);
+            if (!tenant) return { requests: [], message: "No tenant found with this phone number." };
+
+            const requests = await db.maintenanceRequest.findMany({
+                where: { tenantId: tenant.id },
+                orderBy: { createdAt: "desc" },
+                take: 10,
+                select: {
+                    id: true,
+                    message: true,
+                    status: true,
+                    createdAt: true,
+                    updatedAt: true,
+                    triageJson: true,
+                    aiDraft: true,
+                },
+            });
+
+            if (!requests.length) {
+                return { requests: [], message: "You have no maintenance requests on file." };
+            }
+
+            return {
+                requests: requests.map((r: any) => ({
+                    id: r.id,
+                    message: (r.message || "").substring(0, 200),
+                    status: r.status || "open",
+                    severity: r.triageJson?.classification?.severity || "unknown",
+                    category: r.triageJson?.classification?.category || "unknown",
+                    createdAt: r.createdAt,
+                    updatedAt: r.updatedAt,
+                    latestDraft: (r.aiDraft?.draft || "").substring(0, 200),
+                })),
+                total: requests.length,
+            };
+        },
+    };
+}
+
+/**
+ * Register the limited set of tools available to tenants.
+ * Tenants get: web_search, triage_message, draft_reply, current_time,
+ * check_my_request_status, and conversation_history.
+ * They do NOT get: lookup_tenant, lookup_unit, list_maintenance,
+ * create/update maintenance, contractors, utility, send_whatsapp,
+ * alert_landlord, dispatch_contractor, green_button, etc.
+ */
+export function registerTenantTools(): ToolDefinition[] {
+    return [
+        // Let the agent triage and draft internally
+        triageMessageTool(),
+        draftReplyTool(),
+        // Tenant can check their own requests
+        checkMyRequestStatusTool(),
+        // Web search for general info
+        webSearchTool(),
+        // Conversation context
+        conversationHistoryTool(),
+        // Utility
+        currentTimeTool(),
+    ];
+}

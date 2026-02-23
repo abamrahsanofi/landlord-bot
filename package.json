@@ -28,6 +28,8 @@
     "puppeteer-extra-plugin-stealth": "^2.11.2",
     "stripe": "^14.14.0",
     "twilio": "^4.20.0",
+    "web-push": "^3.6.7",
+    "ws": "^8.19.0",
     "zod": "^4.2.1"
   },
   "devDependencies": {
@@ -37,6 +39,7 @@
     "@types/morgan": "^1.9.10",
     "@types/node": "^20.10.6",
     "@types/twilio": "^3.19.2",
+    "@types/ws": "^8.18.1",
     "prisma": "^5.21.1",
     "ts-node": "^10.9.2",
     "typescript": "^5.3.3"

@@ -473,7 +473,7 @@ async function flushTenantReply(params: { tenantId: string }) {
         draftLength: draftText.length,
       });
       if (draftText && canAutoReply) {
-        const sendResult = await whatsappService.sendWhatsAppText({ to: bucket.replyTo, text: draftText });
+        const sendResult = await whatsappService.sendWhatsAppText({ to: bucket.replyTo, text: draftText, landlordId });
         if (!sendResult.ok) {
           // eslint-disable-next-line no-console
           console.error("auto-reply send FAILED (agentic batch)", { tenantId: tenant.id, replyTo: bucket.replyTo, error: sendResult.error, response: sendResult.response });
@@ -493,6 +493,16 @@ async function flushTenantReply(params: { tenantId: string }) {
         // eslint-disable-next-line no-console
         console.info("auto-reply skipped (agentic batch)", { tenantId: tenant.id, hasDraft: Boolean(draftText), canAutoReply });
       }
+
+      // Notify landlord about tenant message (batched agentic path)
+      const agentAlert = `Tenant ${tenant.name} (${tenant.phone || bucket.replyTo}) says: ${combinedMessage}\nAI Draft: ${draftText || "(agent handled)"}`;
+      if (landlordId) {
+        await whatsappService.alertLandlord(landlordId, agentAlert, {
+          type: "maintenance",
+          tenantPhone: tenant.phone || bucket.replyTo,
+        });
+      }
+
       return null;
     } catch (err) {
       // eslint-disable-next-line no-console
@@ -558,7 +568,7 @@ async function flushTenantReply(params: { tenantId: string }) {
 
   const draftText = (draftResponse?.draft || "").trim();
   if (draftText && canAutoReply) {
-    const sendResult = await whatsappService.sendWhatsAppText({ to: bucket.replyTo, text: draftText });
+    const sendResult = await whatsappService.sendWhatsAppText({ to: bucket.replyTo, text: draftText, landlordId });
     if (!sendResult.ok) {
       // eslint-disable-next-line no-console
       console.error("auto-reply send FAILED (linear batch)", { tenantId: tenant.id, replyTo: bucket.replyTo, error: sendResult.error, response: sendResult.response });
@@ -589,7 +599,12 @@ async function flushTenantReply(params: { tenantId: string }) {
   const draft = aiDraft?.draft || "(no draft yet)";
   const alert = `Tenant ${tenant.name} (${tenant.phone || bucket.replyTo}) says: ${combinedMessage}\nSeverity: ${severity}\nDraft: ${draft}`;
   if (landlordId) {
-    await whatsappService.alertLandlord(landlordId, alert);
+    await whatsappService.alertLandlord(landlordId, alert, {
+      type: "maintenance",
+      maintenanceId: record?.id,
+      tenantPhone: tenant.phone || bucket.replyTo,
+      severity: severity.toString(),
+    });
   } else {
     for (const number of landlordNumbers()) {
       await whatsappService.sendWhatsAppText({ to: number, text: alert });
@@ -597,6 +612,24 @@ async function flushTenantReply(params: { tenantId: string }) {
   }
 
   return record;
+}
+
+/**
+ * Extract the Evolution API instance name from the webhook payload.
+ * Evolution API includes this in the webhook body.
+ */
+function extractInstanceName(payload: any): string {
+  return payload?.instance || payload?.instanceName || payload?.data?.instance || payload?.server_url || "";
+}
+
+/**
+ * Resolve the landlord who owns a given Evolution API instance.
+ */
+async function resolveLandlordByInstance(instanceName: string) {
+  if (!instanceName) return null;
+  try {
+    return await repo.findLandlordByInstance(instanceName);
+  } catch { return null; }
 }
 
 // Evolution API may post to /whatsapp or /whatsapp/evolution depending on instance config
@@ -617,17 +650,37 @@ const evolutionWebhookHandler: express.RequestHandler = async (req, res) => {
     }
     const fromMe = isFromMe(req.body);
 
-    // Ignore bot-echoed messages unless it's the landlord number initiating a request.
+    // ── Instance Resolution ──
+    const instanceName = extractInstanceName(req.body);
+    let instanceLandlord = instanceName ? await resolveLandlordByInstance(instanceName) : null;
+
+    const resolvedLandlordId = instanceLandlord?.id || "";
+
+    // Ignore group messages — we only process direct messages
+    if (isGroup) {
+      return res.json({ ok: true, ignored: "group_message" });
+    }
+
+    // Ignore bot-echoed/own messages (except landlord self-chat)
     if (fromMe) {
-      if (!isLandlordNumber(sender)) return res.json({ ok: true, ignored: "from_me" });
+      if (!instanceLandlord && !isLandlordNumber(sender)) return res.json({ ok: true, ignored: "from_me" });
       if (text?.startsWith("AI Assistance:")) return res.json({ ok: true, ignored: "from_me_ai_echo" });
       // landlord self-test allowed to proceed
     }
 
     // ── Multi-landlord resolution ──
-    const ctx = await resolveContext(sender);
+    // First try to resolve by Evolution API instance name (most reliable for multi-tenant)
+
+    let ctx = await resolveContext(sender);
+    // If sender is unknown but we know the instance, resolve via instance owner
+    if (ctx.role === "unknown" && instanceLandlord) {
+      // Sender is a tenant/unknown person messaging a landlord's WhatsApp — treat as tenant
+      ctx = { role: "unknown", landlordId: instanceLandlord.id, entity: null };
+    }
+
     const isLandlord = ctx.role === "landlord";
-    const landlordId = ctx.landlordId || "";
+    const landlordId = resolvedLandlordId || ctx.landlordId || "";
+    const effectiveReplyTo = replyTo;
 
     const respond = (payload: Record<string, unknown>) => {
       setWebhookStatus({
@@ -647,8 +700,9 @@ const evolutionWebhookHandler: express.RequestHandler = async (req, res) => {
       const record = await repo.findLatestOpenMaintenance(landlordId || undefined);
       if (!record) {
         await whatsappService.sendWhatsAppText({
-          to: sender,
+          to: effectiveReplyTo,
           text: "No active tenant requests right now.",
+          landlordId,
         });
         return respond({ ok: true, routed: "landlord_no_active", llmInvoked, autoReplySent });
       }
@@ -680,7 +734,7 @@ const evolutionWebhookHandler: express.RequestHandler = async (req, res) => {
           llmInvoked = true;
 
           const reply = (agentResult.finalAnswer || "").trim() || "I'm here. Ask anything about the issue.";
-          await whatsappService.sendWhatsAppText({ to: sender, text: `AI Assistance: ${reply}` });
+          await whatsappService.sendWhatsAppText({ to: effectiveReplyTo, text: `AI Assistance: ${reply}`, landlordId });
           await repo.appendChatMessage({
             id: record.id,
             role: "ai",
@@ -702,7 +756,7 @@ const evolutionWebhookHandler: express.RequestHandler = async (req, res) => {
           if (approved && record.tenantId && forwardDraft) {
             const tenantForForward = await repo.getTenantById(record.tenantId);
             if (tenantForForward?.phone) {
-              await whatsappService.sendWhatsAppText({ to: tenantForForward.phone, text: forwardDraft });
+              await whatsappService.sendWhatsAppText({ to: tenantForForward.phone, text: forwardDraft, landlordId });
               await repo.appendChatMessage({
                 id: record.id,
                 role: "ai",
@@ -756,7 +810,7 @@ const evolutionWebhookHandler: express.RequestHandler = async (req, res) => {
           return "";
         })();
         const labeledAiReply = `AI Assistance:\nAction: ${analysis || "No analysis"}\nTenant draft: ${tenantDraft || "No draft yet"}`;
-        await whatsappService.sendWhatsAppText({ to: sender, text: labeledAiReply });
+        await whatsappService.sendWhatsAppText({ to: effectiveReplyTo, text: labeledAiReply, landlordId });
         await repo.appendChatMessage({
           id: record.id,
           role: "ai",
@@ -801,7 +855,7 @@ const evolutionWebhookHandler: express.RequestHandler = async (req, res) => {
           }
           return raw || "I’m here. Ask anything about the issue, approvals, or next steps.";
         })();
-        await whatsappService.sendWhatsAppText({ to: sender, text: `AI Assistance: ${chatReply}` });
+        await whatsappService.sendWhatsAppText({ to: effectiveReplyTo, text: `AI Assistance: ${chatReply}`, landlordId });
         await repo.appendChatMessage({
           id: record.id,
           role: "ai",
@@ -816,7 +870,7 @@ const evolutionWebhookHandler: express.RequestHandler = async (req, res) => {
       if (approved && record.tenantId && forwardDraft) {
         const tenant = await repo.getTenantById(record.tenantId);
         if (tenant?.phone) {
-          await whatsappService.sendWhatsAppText({ to: tenant.phone, text: forwardDraft });
+          await whatsappService.sendWhatsAppText({ to: tenant.phone, text: forwardDraft, landlordId });
           await repo.appendChatMessage({
             id: record.id,
             role: "ai",
@@ -860,7 +914,7 @@ const evolutionWebhookHandler: express.RequestHandler = async (req, res) => {
     // and document detection—all via Gemini multimodal capabilities.
     let mediaResult: ExtractedMedia | null = null;
     try {
-      mediaResult = await processMedia(req.body, text);
+      mediaResult = await processMedia(req.body, text, instanceName);
       if (mediaResult) {
         llmInvoked = true;
         // eslint-disable-next-line no-console
@@ -971,7 +1025,7 @@ const evolutionWebhookHandler: express.RequestHandler = async (req, res) => {
         const canAutoReply = globalAutoReply.enabled && tenant.autoReplyEnabled !== false;
 
         if (agentDraft && canAutoReply) {
-          const sendResult = await whatsappService.sendWhatsAppText({ to: replyTo, text: agentDraft });
+          const sendResult = await whatsappService.sendWhatsAppText({ to: replyTo, text: agentDraft, landlordId: tenantLandlordId });
           if (!sendResult.ok) {
             // eslint-disable-next-line no-console
             console.error("auto-reply send FAILED (agentic immediate)", { tenantId: tenant.id, replyTo, error: sendResult.error, response: sendResult.response });
@@ -994,6 +1048,18 @@ const evolutionWebhookHandler: express.RequestHandler = async (req, res) => {
           steps: agentResult.steps.length,
           autoReplySent,
         });
+
+        // Notify landlord about tenant message (agentic path)
+        const agentSeverity = (triage?.classification?.severity || "normal").toString().toLowerCase();
+        const agentAlert = `Tenant ${tenant.name} (${tenant.phone || sender}) says: ${tenantMessage}\nSeverity: ${agentSeverity}\nAI Draft: ${agentDraft || "(agent handled)"}`;
+        if (tenantLandlordId) {
+          await whatsappService.alertLandlord(tenantLandlordId, agentAlert, {
+            type: "maintenance",
+            maintenanceId: record?.id,
+            tenantPhone: tenant.phone || sender,
+            severity: agentSeverity,
+          });
+        }
 
         return respond({ ok: true, routed: "tenant_agentic", llmInvoked, autoReplySent, autoReplyReason });
       } catch (err) {
@@ -1027,6 +1093,7 @@ const evolutionWebhookHandler: express.RequestHandler = async (req, res) => {
       const sendResult = await whatsappService.sendWhatsAppText({
         to: replyTo,
         text: draftText,
+        landlordId: tenantLandlordId,
       });
       if (!sendResult.ok) {
         // eslint-disable-next-line no-console
@@ -1053,7 +1120,12 @@ const evolutionWebhookHandler: express.RequestHandler = async (req, res) => {
     const draft = aiDraft?.draft || "(no draft yet)";
     const alert = `Tenant ${tenant.name} (${tenant.phone || sender}) says: ${tenantMessage}\nSeverity: ${severity}\nDraft: ${draft}`;
     if (tenantLandlordId) {
-      await whatsappService.alertLandlord(tenantLandlordId, alert);
+      await whatsappService.alertLandlord(tenantLandlordId, alert, {
+        type: "maintenance",
+        maintenanceId: record?.id,
+        tenantPhone: tenant.phone || sender,
+        severity: severity.toString(),
+      });
     } else {
       for (const number of landlordNumbers()) {
         await whatsappService.sendWhatsAppText({ to: number, text: alert });

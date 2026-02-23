@@ -1,5 +1,6 @@
 import dotenv from "dotenv";
 import express from "express";
+import http from "http";
 import path from "path";
 import bodyParser from "body-parser";
 import morgan from "morgan";
@@ -15,6 +16,8 @@ import { registerPlugin, initializePlugins } from "./services/verticalPlugin";
 import { propertyManagementPlugin } from "./verticals/property-management";
 import { apiRateLimit, authRateLimit } from "./services/rateLimiter";
 import { sendLeaseExpiryAlerts } from "./services/leaseExpiryService";
+import { requireAuth } from "./middleware/auth";
+import { initWebSocket } from "./services/websocketService";
 
 dotenv.config();
 
@@ -22,7 +25,11 @@ dotenv.config();
 registerPlugin(propertyManagementPlugin);
 
 const app = express();
+const server = http.createServer(app);
 const port = process.env.PORT || 3000;
+
+// Initialize WebSocket server
+initWebSocket(server);
 
 // Stripe webhooks need raw body
 app.post("/webhooks/stripe", express.raw({ type: "application/json" }), async (req, res) => {
@@ -56,18 +63,18 @@ app.use("/auth", authRateLimit, authRouter);
 app.use("/webhooks", webhooksRouter);
 app.use("/api", apiRateLimit, apiRouter);
 app.use("/admin", apiRateLimit, adminRouter);
-app.use("/maintenance/list", apiRateLimit, maintenanceListRouter);
-app.use("/maintenance", apiRateLimit, maintenanceRouter);
+app.use("/maintenance/list", apiRateLimit, requireAuth, maintenanceListRouter);
+app.use("/maintenance", apiRateLimit, requireAuth, maintenanceRouter);
 
 app.get("/health", (_req, res) => {
   res.json({ ok: true });
 });
 
-app.listen(port, async () => {
+server.listen(port, async () => {
   // Initialize all registered vertical plugins
   await initializePlugins();
   // eslint-disable-next-line no-console
-  console.log(`NestMind AI listening on port ${port}`);
+  console.log(`AI Agent listening on port ${port}`);
 });
 
 const REMINDER_POLL_MS = 30 * 1000;

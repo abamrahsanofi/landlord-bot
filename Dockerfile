@@ -36,9 +36,9 @@ RUN pip3 install --no-cache-dir --break-system-packages \
 # ── App setup ────────────────────────────────────────────────
 WORKDIR /app
 
-# Install Node.js dependencies
+# Install Node.js dependencies (include devDeps — ts-node & prisma CLI are needed at runtime)
 COPY package.json package-lock.json* ./
-RUN npm ci --omit=dev && npm cache clean --force
+RUN npm ci && npm cache clean --force
 
 # Copy Prisma schema & generate client
 COPY prisma ./prisma

@@ -45,7 +45,8 @@
             background: var(--bg);
             color: var(--text);
             overflow-x: hidden;
-            line-height: 1.6;
+            line-height: 1.7;
+            font-size: 16px;
         }
 
         /* ── NAV ── */
@@ -103,7 +104,7 @@
         .nav-links a {
             color: var(--text-secondary);
             text-decoration: none;
-            font-size: 14px;
+            font-size: 16px;
             font-weight: 500;
             transition: color 0.2s;
         }
@@ -115,10 +116,10 @@
         .nav-cta {
             background: #fff;
             color: #000;
-            padding: 10px 24px;
+            padding: 12px 28px;
             border-radius: 100px;
             font-weight: 600;
-            font-size: 14px;
+            font-size: 16px;
             text-decoration: none;
             transition: transform 0.2s, box-shadow 0.2s;
         }
@@ -209,7 +210,7 @@
         }
 
         .hero p {
-            font-size: 18px;
+            font-size: 20px;
             color: var(--text-secondary);
             max-width: 560px;
             margin: 0 auto 40px;
@@ -224,9 +225,9 @@
         }
 
         .btn-lg {
-            padding: 16px 36px;
+            padding: 18px 40px;
             border-radius: 100px;
-            font-size: 15px;
+            font-size: 17px;
             font-weight: 600;
             text-decoration: none;
             transition: all 0.2s;
@@ -316,7 +317,7 @@
         }
 
         .section-sub {
-            font-size: 16px;
+            font-size: 18px;
             color: var(--text-secondary);
             max-width: 560px;
             line-height: 1.7;
@@ -357,13 +358,13 @@
         }
 
         .feature-title {
-            font-size: 28px;
+            font-size: 30px;
             font-weight: 700;
             margin-bottom: 12px;
         }
 
         .feature-desc {
-            font-size: 15px;
+            font-size: 17px;
             color: var(--text-secondary);
             line-height: 1.8;
             margin-bottom: 20px;
@@ -378,9 +379,9 @@
         .feature-tag {
             background: var(--surface-2);
             border: 1px solid var(--border);
-            padding: 6px 14px;
+            padding: 8px 16px;
             border-radius: 100px;
-            font-size: 12px;
+            font-size: 14px;
             font-weight: 500;
             color: var(--text-secondary);
         }
@@ -524,7 +525,7 @@
         }
 
         .price-desc {
-            font-size: 14px;
+            font-size: 16px;
             color: var(--text-secondary);
             margin-bottom: 28px;
             line-height: 1.6;
@@ -537,8 +538,8 @@
         }
 
         .price-features li {
-            padding: 10px 0;
-            font-size: 14px;
+            padding: 12px 0;
+            font-size: 16px;
             color: var(--text-secondary);
             display: flex;
             align-items: center;
@@ -558,11 +559,11 @@
         .price-btn {
             display: block;
             width: 100%;
-            padding: 14px;
+            padding: 16px;
             border-radius: 100px;
             text-align: center;
             font-weight: 600;
-            font-size: 14px;
+            font-size: 16px;
             cursor: pointer;
             text-decoration: none;
             transition: all 0.2s;
@@ -615,7 +616,7 @@
 
         .faq-q {
             padding: 24px 0;
-            font-size: 16px;
+            font-size: 18px;
             font-weight: 600;
             display: flex;
             justify-content: space-between;
@@ -636,7 +637,7 @@
             max-height: 0;
             overflow: hidden;
             transition: max-height 0.4s ease, padding 0.3s;
-            font-size: 14px;
+            font-size: 16px;
             color: var(--text-secondary);
             line-height: 1.8;
         }
@@ -685,9 +686,9 @@
         .footer-links a {
             display: block;
             color: var(--text-muted);
-            font-size: 14px;
+            font-size: 16px;
             text-decoration: none;
-            padding: 4px 0;
+            padding: 5px 0;
             transition: color 0.2s;
         }
 
@@ -753,6 +754,30 @@
 
             .nav-links {
                 display: none;
+                position: absolute;
+                top: 72px;
+                left: 0;
+                right: 0;
+                flex-direction: column;
+                background: rgba(0, 0, 0, 0.95);
+                backdrop-filter: blur(20px);
+                padding: 24px 20px;
+                gap: 16px;
+                border-bottom: 1px solid var(--border);
+            }
+
+            .nav-links.open {
+                display: flex;
+            }
+
+            .nav-links a {
+                font-size: 18px;
+                padding: 8px 0;
+            }
+
+            .nav-cta {
+                text-align: center;
+                display: block;
             }
 
             .mobile-menu {
@@ -763,14 +788,40 @@
                 padding: 120px 20px 60px;
             }
 
+            .hero p {
+                font-size: 17px;
+            }
+
+            .hero-buttons {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .btn-lg {
+                text-align: center;
+                padding: 16px 28px;
+            }
+
             .section {
-                padding: 80px 20px;
+                padding: 60px 20px;
             }
 
             .feature-row,
             .feature-row.reverse {
                 grid-template-columns: 1fr;
                 gap: 30px;
+            }
+
+            .feature-row.reverse {
+                direction: ltr;
+            }
+
+            .feature-title {
+                font-size: 24px;
+            }
+
+            .feature-number {
+                font-size: 56px;
             }
 
             .pricing-grid {
@@ -784,6 +835,49 @@
             .cta-banner {
                 margin: 0 20px 60px;
                 padding: 60px 20px;
+            }
+
+            .cta-banner h2 {
+                font-size: 28px;
+            }
+
+            .marquee span {
+                font-size: 13px;
+            }
+
+            .chat-bubble {
+                font-size: 15px;
+            }
+
+            .feature-mock {
+                font-size: 14px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .hero h1 {
+                font-size: 36px;
+                letter-spacing: -1px;
+            }
+
+            .hero-badge {
+                font-size: 12px;
+            }
+
+            .section-title {
+                font-size: 28px;
+            }
+
+            .price-card {
+                padding: 28px;
+            }
+
+            .price-amount {
+                font-size: 40px;
+            }
+
+            footer {
+                padding: 40px 20px;
             }
         }
     </style>
@@ -806,7 +900,7 @@
                 <a href="/signup" class="nav-cta">Get Started</a>
             </div>
             <button class="mobile-menu"
-                onclick="document.querySelector('.nav-links').style.display=document.querySelector('.nav-links').style.display==='flex'?'none':'flex'">☰</button>
+                onclick="document.querySelector('.nav-links').classList.toggle('open')">☰</button>
         </div>
     </nav>
 

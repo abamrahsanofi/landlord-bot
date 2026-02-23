@@ -22,6 +22,23 @@ function getConfig() {
   };
 }
 
+/**
+ * Resolve the Evolution API instance name for a given landlord.
+ * Falls back to the env var EVOLUTION_API_SESSION / EVOLUTION_API_INSTANCE.
+ */
+async function resolveInstance(landlordId?: string): Promise<string> {
+  if (landlordId) {
+    try {
+      const { db } = require("../config/database");
+      const landlord = await db.landlord.findUnique({ where: { id: landlordId }, select: { evolutionInstanceName: true } });
+      if (landlord?.evolutionInstanceName) return landlord.evolutionInstanceName;
+    } catch { }
+  }
+  // Fallback to env var
+  const cfg = getConfig();
+  return cfg.instance || cfg.session;
+}
+
 function buildSendUrl(baseUrl: string, path: string, session: string) {
   const normalizedBase = baseUrl.replace(/\/+$/, "");
   let fullPath = path.startsWith("/") ? path : `/${path}`;
@@ -52,14 +69,13 @@ export async function sendWhatsAppText(params: SendTextParams): Promise<SendResu
     console.error("sendWhatsAppText BLOCKED: Evolution API not configured", { baseUrl: Boolean(cfg.baseUrl), token: Boolean(cfg.token) });
     return { ok: false, error: "evolution_api_not_configured" };
   }
-  const session = params.session || cfg.session;
-  const url = buildSendUrl(cfg.baseUrl, cfg.sendPath, session);
+  // Resolve instance for this landlord (per-landlord instance routing)
+  const instanceName = params.session || await resolveInstance(params.landlordId);
+  const url = buildSendUrl(cfg.baseUrl, cfg.sendPath, instanceName);
   const payload: Record<string, unknown> = {
     number: normalizeWhatsAppNumber(params.to),
     text: params.text,
-    session,
   };
-  if (cfg.instance) payload.instance = cfg.instance;
   // eslint-disable-next-line no-console
   console.info("sendWhatsAppText →", { url, to: payload.number, textLen: (params.text || "").length });
   try {
@@ -88,16 +104,44 @@ export async function sendWhatsAppText(params: SendTextParams): Promise<SendResu
 }
 
 /**
- * Helper: send a message to all of a landlord's WhatsApp numbers
+ * Send a notification to the landlord via WhatsApp self-chat and web dashboard.
+ * WhatsApp: sends to each of the landlord's whatsappNumbers (self-chat).
+ * Web: pushes a real-time notification via WebSocket if available.
  */
-export async function alertLandlord(landlordId: string, text: string): Promise<void> {
+export async function alertLandlord(landlordId: string, text: string, extra?: { type?: string; maintenanceId?: string; tenantPhone?: string; severity?: string }): Promise<void> {
   // Import dynamically to avoid circular deps
   const { db } = require("../config/database");
   try {
-    const landlord = await db.landlord.findUnique({ where: { id: landlordId }, select: { whatsappNumbers: true } });
-    if (!landlord?.whatsappNumbers?.length) return;
-    for (const number of landlord.whatsappNumbers) {
-      await sendWhatsAppText({ to: number, text, landlordId });
+    const landlord = await db.landlord.findUnique({
+      where: { id: landlordId },
+      select: { whatsappNumbers: true },
+    });
+    if (!landlord) return;
+
+    // Send to each whatsapp number (self-chat)
+    if (landlord.whatsappNumbers?.length) {
+      for (const number of landlord.whatsappNumbers) {
+        await sendWhatsAppText({ to: number, text, landlordId });
+      }
+    }
+
+    // Push web notification via WebSocket
+    try {
+      const { broadcastToLandlord, createNotification } = require("./websocketService");
+      const notifType = extra?.type || "TENANT_MESSAGE";
+      const title = notifType === "APPROVAL_REQUEST" ? "Approval Request"
+        : notifType === "MAINTENANCE_NEW" ? "New Maintenance Request"
+          : notifType === "CONTRACTOR_MESSAGE" ? "Contractor Message"
+            : "Tenant Message";
+      await createNotification({
+        landlordId,
+        type: notifType,
+        title,
+        body: text.substring(0, 500),
+        data: { maintenanceId: extra?.maintenanceId, tenantPhone: extra?.tenantPhone, severity: extra?.severity },
+      });
+    } catch (_wsErr) {
+      // WebSocket service not available — silently skip
     }
   } catch (err) {
     console.warn("alertLandlord failed", err); // eslint-disable-line no-console

@@ -141,6 +141,8 @@ const router = express.Router();
 
 router.post("/", async (req, res) => {
   try {
+    const landlordId = req.landlordId;
+    if (!landlordId) return res.status(401).json({ error: "unauthorized" });
     const parsed = maintenanceSchema.safeParse(req.body || {});
     if (!parsed.success) {
       return res.status(400).json({ error: "validation_failed", details: parsed.error.flatten() });
@@ -177,6 +179,7 @@ router.post("/", async (req, res) => {
       message: tenantMessage,
       triage,
       aiDraft: draftResponse,
+      landlordId,
     });
 
     if (maintenanceRecord?.id) {
@@ -196,8 +199,11 @@ router.post("/", async (req, res) => {
 
 router.get("/:id", async (req, res) => {
   try {
+    const landlordId = req.landlordId;
+    if (!landlordId) return res.status(401).json({ error: "unauthorized" });
     const record = await repo.getMaintenanceById(req.params.id);
     if (!record) return res.status(404).json({ error: "not_found" });
+    if (record.landlordId && record.landlordId !== landlordId) return res.status(403).json({ error: "forbidden" });
     res.json({ item: record });
   } catch (err) {
     // eslint-disable-next-line no-console
@@ -212,8 +218,11 @@ router.post("/:id/chat", async (req, res) => {
     return res.status(400).json({ error: "validation_failed", details: parsed.error.flatten() });
   }
   try {
+    const landlordId = req.landlordId;
+    if (!landlordId) return res.status(401).json({ error: "unauthorized" });
     const record = await repo.getMaintenanceById(req.params.id);
     if (!record) return res.status(404).json({ error: "not_found" });
+    if (record.landlordId && record.landlordId !== landlordId) return res.status(403).json({ error: "forbidden" });
 
     const updated = await repo.appendChatMessage({
       id: record.id,
@@ -273,8 +282,11 @@ router.post("/:id/refine", async (req, res) => {
     return res.status(400).json({ error: "validation_failed", details: parsed.error.flatten() });
   }
   try {
+    const landlordId = req.landlordId;
+    if (!landlordId) return res.status(401).json({ error: "unauthorized" });
     const record = await repo.getMaintenanceById(req.params.id);
     if (!record) return res.status(404).json({ error: "not_found" });
+    if (record.landlordId && record.landlordId !== landlordId) return res.status(403).json({ error: "forbidden" });
 
     const aiDraft = record.aiDraft && typeof record.aiDraft === "object" ? record.aiDraft : null;
     const storedDraft = aiDraft && typeof aiDraft.draft === "string" ? aiDraft.draft : "";
@@ -311,8 +323,11 @@ router.post("/:id/advisor", async (req, res) => {
     return res.status(400).json({ error: "validation_failed", details: parsed.error.flatten() });
   }
   try {
+    const landlordId = req.landlordId;
+    if (!landlordId) return res.status(401).json({ error: "unauthorized" });
     const record = await repo.getMaintenanceById(req.params.id);
     if (!record) return res.status(404).json({ error: "not_found" });
+    if (record.landlordId && record.landlordId !== landlordId) return res.status(403).json({ error: "forbidden" });
 
     const aiDraft = record.aiDraft && typeof record.aiDraft === "object" ? record.aiDraft : null;
     const storedDraft = aiDraft && typeof aiDraft.draft === "string" ? aiDraft.draft : "";
@@ -343,8 +358,11 @@ router.patch("/:id/autopilot", async (req, res) => {
     return res.status(400).json({ error: "validation_failed", details: parsed.error.flatten() });
   }
   try {
+    const landlordId = req.landlordId;
+    if (!landlordId) return res.status(401).json({ error: "unauthorized" });
     const record = await repo.getMaintenanceById(req.params.id);
     if (!record) return res.status(404).json({ error: "not_found" });
+    if (record.landlordId && record.landlordId !== landlordId) return res.status(403).json({ error: "forbidden" });
 
     const toggled = await repo.setAutopilotEnabled({
       id: record.id,

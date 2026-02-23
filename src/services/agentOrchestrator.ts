@@ -8,7 +8,7 @@
 
 import { runAgent, AgentRunResult } from "./agentFramework";
 import { ToolRegistry } from "./toolRegistry";
-import { registerBuiltinTools } from "./tools/builtinTools";
+import { registerBuiltinTools, registerTenantTools } from "./tools/builtinTools";
 import { registerWebTools, closeBrowser } from "./tools/webAgent";
 import { getProfile } from "../config/rtaProfiles";
 import { db } from "../config/database";
@@ -36,6 +36,17 @@ export function buildToolRegistry(plan: "FREE" | "PRO" | "ENTERPRISE" = "FREE"):
     // Apply plan restrictions
     registry.applyPlanRestrictions(plan);
 
+    return registry;
+}
+
+/**
+ * Build a restricted tool registry for tenant-facing interactions.
+ * Tenants only get: web_search, triage, draft, current_time, check_my_request_status, conversation_history.
+ * No landlord-only tools like lookup_tenant, list_maintenance, contractors, utility, whatsapp, etc.
+ */
+export function buildTenantToolRegistry(): ToolRegistry {
+    const registry = new ToolRegistry();
+    registry.registerMany(registerTenantTools());
     return registry;
 }
 
@@ -79,7 +90,8 @@ export async function handleTenantMessage(opts: {
     mediaParts?: Array<{ base64: string; mimeType: string }>;
 }): Promise<AgentRunResult> {
     const ctx = await getAccountContext(opts.landlordId);
-    const registry = buildToolRegistry(ctx.plan);
+    // Tenants get a restricted tool set — no landlord-only tools
+    const registry = buildTenantToolRegistry();
 
     // Use plugin prompt if available, otherwise inline
     const plugin = getActivePlugin();

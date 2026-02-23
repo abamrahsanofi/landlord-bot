@@ -45,7 +45,8 @@ model Landlord {
 	name             String
 	company          String?
 	phone            String?
-	whatsappNumbers  String[] @default([])
+	whatsappNumbers        String[] @default([])
+	evolutionInstanceName  String?
 	plan             Plan     @default(FREE)
 	stripeCustomerId String?
 	province         String   @default("ON")
@@ -64,6 +65,8 @@ model Landlord {
 	utilityCredentials UtilityCredential[]
 	greenButtonConnections GreenButtonConnection[]
 	appSettings      AppSetting[]
+	notifications    Notification[]
+	pushSubscriptions PushSubscription[]
 }
 
 model LandlordSettings {
@@ -313,4 +316,34 @@ model GreenButtonConnection {
 	@@unique([provider, unitId, utilityType])
 	@@index([landlordId])
 	@@index([status])
+}
+
+// ── Notifications ───────────────────────────────────────
+
+model Notification {
+	id         String   @id @default(cuid())
+	landlord   Landlord @relation(fields: [landlordId], references: [id], onDelete: Cascade)
+	landlordId String
+	type       String   // "maintenance" | "approval_request" | "contractor" | "lease" | "utility" | "system" | "info"
+	title      String
+	body       String
+	data       Json?    // Optional structured data (maintenanceId, tenantPhone, severity, etc.)
+	read       Boolean  @default(false)
+	createdAt  DateTime @default(now())
+
+	@@index([landlordId, read])
+	@@index([landlordId, createdAt])
+}
+
+model PushSubscription {
+	id         String   @id @default(cuid())
+	landlord   Landlord @relation(fields: [landlordId], references: [id], onDelete: Cascade)
+	landlordId String
+	endpoint   String
+	p256dh     String
+	auth       String
+	createdAt  DateTime @default(now())
+
+	@@unique([landlordId, endpoint])
+	@@index([landlordId])
 }

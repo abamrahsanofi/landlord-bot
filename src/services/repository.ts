@@ -30,6 +30,19 @@ export async function findLandlordForTenantPhone(phone: string) {
   } catch { return null; }
 }
 
+export async function findLandlordByInstance(instanceName: string) {
+  if (!isDbEnabled || !instanceName) return null;
+  try {
+    return await db.landlord.findFirst({
+      where: { evolutionInstanceName: instanceName },
+    });
+  } catch {
+    return null;
+  }
+}
+
+
+
 export async function getLandlordById(id: string) {
   if (!isDbEnabled || !id) return null;
   try {
@@ -339,9 +352,10 @@ export async function updateMaintenanceAnalysis(params: {
   }
 }
 
-export async function listUtilityBills(params: { unitId?: string; tenantId?: string; limit?: number }) {
+export async function listUtilityBills(params: { unitId?: string; tenantId?: string; limit?: number; landlordId?: string }) {
   if (!isDbEnabled) return [];
   const where: Prisma.UtilityBillWhereInput = {};
+  if (params.landlordId) where.landlordId = params.landlordId;
   if (params.unitId) where.unitId = params.unitId;
   if (params.tenantId) where.tenantId = params.tenantId;
   const limit = params.limit && params.limit > 0 ? params.limit : 100;
@@ -384,9 +398,10 @@ export async function createUtilityCredential(params: {
   }
 }
 
-export async function listUtilityCredentials(params?: { unitId?: string; utilityType?: string }) {
+export async function listUtilityCredentials(params?: { unitId?: string; utilityType?: string; landlordId?: string }) {
   if (!isDbEnabled) return [];
   const where: Prisma.UtilityCredentialWhereInput = {};
+  if (params?.landlordId) where.landlordId = params.landlordId;
   if (params?.unitId) where.unitId = params.unitId;
   if (params?.utilityType) where.utilityType = params.utilityType as UtilityType;
   try {
@@ -952,6 +967,7 @@ export async function createUtilityBill(params: {
   anomalyFlag?: boolean;
   anomalyNotes?: string;
   rawData?: unknown;
+  landlordId?: string;
 }) {
   if (!isDbEnabled) return null;
   try {
@@ -970,6 +986,7 @@ export async function createUtilityBill(params: {
         unitId: params.unitId,
         tenantId: params.tenantId,
         maintenanceId: params.maintenanceId,
+        landlordId: params.landlordId,
       },
     });
   } catch (err) {
@@ -1080,6 +1097,113 @@ export default {
   // Multi-landlord
   findLandlordByWhatsApp,
   findLandlordForTenantPhone,
+  findLandlordByInstance,
   getLandlordById,
   getLandlordWhatsAppNumbers,
+  // Ownership checks
+  verifyTenantOwnership,
+  verifyUnitOwnership,
+  verifyContractorOwnership,
+  verifyMaintenanceOwnership,
+  verifyUtilityCredentialOwnership,
+  verifyUtilityBillOwnership,
+  verifyReminderOwnership,
+  // Account deletion
+  deleteAllLandlordData,
 };
+
+// ── Ownership verification helpers ─────────────────────
+// These verify a record belongs to the authenticated landlord.
+
+export async function verifyTenantOwnership(tenantId: string, landlordId: string): Promise<boolean> {
+  if (!isDbEnabled) return false;
+  try {
+    const t = await db.tenant.findUnique({ where: { id: tenantId }, select: { landlordId: true } });
+    return t?.landlordId === landlordId;
+  } catch { return false; }
+}
+
+export async function verifyUnitOwnership(unitId: string, landlordId: string): Promise<boolean> {
+  if (!isDbEnabled) return false;
+  try {
+    const u = await db.unit.findUnique({ where: { id: unitId }, select: { landlordId: true } });
+    return u?.landlordId === landlordId;
+  } catch { return false; }
+}
+
+export async function verifyContractorOwnership(contractorId: string, landlordId: string): Promise<boolean> {
+  if (!isDbEnabled) return false;
+  try {
+    const c = await db.contractor.findUnique({ where: { id: contractorId }, select: { landlordId: true } });
+    return c?.landlordId === landlordId;
+  } catch { return false; }
+}
+
+export async function verifyMaintenanceOwnership(maintenanceId: string, landlordId: string): Promise<boolean> {
+  if (!isDbEnabled) return false;
+  try {
+    const m = await db.maintenanceRequest.findUnique({ where: { id: maintenanceId }, select: { landlordId: true } });
+    return m?.landlordId === landlordId;
+  } catch { return false; }
+}
+
+export async function verifyUtilityCredentialOwnership(credentialId: string, landlordId: string): Promise<boolean> {
+  if (!isDbEnabled) return false;
+  try {
+    const c = await db.utilityCredential.findUnique({ where: { id: credentialId }, select: { landlordId: true } });
+    return c?.landlordId === landlordId;
+  } catch { return false; }
+}
+
+export async function verifyUtilityBillOwnership(billId: string, landlordId: string): Promise<boolean> {
+  if (!isDbEnabled) return false;
+  try {
+    const b = await db.utilityBill.findUnique({ where: { id: billId }, select: { landlordId: true } });
+    return b?.landlordId === landlordId;
+  } catch { return false; }
+}
+
+export async function verifyReminderOwnership(reminderId: string, landlordId: string): Promise<boolean> {
+  if (!isDbEnabled) return false;
+  try {
+    const r = await db.reminder.findUnique({ where: { id: reminderId }, select: { landlordId: true } });
+    return r?.landlordId === landlordId;
+  } catch { return false; }
+}
+
+/**
+ * Delete ALL data for a landlord — full account wipe.
+ * Returns evolution API instance names that need external cleanup.
+ */
+export async function deleteAllLandlordData(landlordId: string): Promise<{ instanceNames: string[] }> {
+  if (!isDbEnabled || !landlordId) return { instanceNames: [] };
+
+  // Collect Evolution instances to delete externally
+  const landlord = await db.landlord.findUnique({
+    where: { id: landlordId },
+    select: { evolutionInstanceName: true },
+  });
+  const instanceNames: string[] = [];
+  if (landlord?.evolutionInstanceName) instanceNames.push(landlord.evolutionInstanceName);
+
+  // Delete in FK-safe order  
+  await db.$transaction([
+    db.conversationMessage.deleteMany({ where: { landlordId } }),
+    db.agentUsage.deleteMany({ where: { landlordId } }),
+    db.reminder.deleteMany({ where: { landlordId } }),
+    db.utilityBill.deleteMany({ where: { landlordId } }),
+    db.greenButtonConnection.deleteMany({ where: { landlordId } }),
+    db.utilityCredential.deleteMany({ where: { landlordId } }),
+    db.maintenanceRequest.deleteMany({ where: { landlordId } }),
+    // UnitTenants via unit ownership
+    db.unitTenant.deleteMany({ where: { unit: { landlordId } } }),
+    db.contractor.deleteMany({ where: { landlordId } }),
+    db.landlordSettings.deleteMany({ where: { landlordId } }),
+    db.appSetting.deleteMany({ where: { landlordId } }),
+    db.tenant.deleteMany({ where: { landlordId } }),
+    db.unit.deleteMany({ where: { landlordId } }),
+    db.landlord.delete({ where: { id: landlordId } }),
+  ]);
+
+  return { instanceNames };
+}

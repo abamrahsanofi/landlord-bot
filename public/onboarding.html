@@ -47,6 +47,7 @@
             color: var(--text);
             min-height: 100vh;
             position: relative;
+            font-size: 16px;
         }
 
         body::before {
@@ -99,7 +100,7 @@
         }
 
         .header h1 {
-            font-size: 28px;
+            font-size: 32px;
             font-weight: 700;
             color: #fff;
             margin-top: 8px;
@@ -108,7 +109,7 @@
         .header p {
             color: var(--text-muted);
             margin-top: 8px;
-            font-size: 15px;
+            font-size: 17px;
         }
 
         .stepper {
@@ -151,7 +152,7 @@
         }
 
         .card h2 {
-            font-size: 20px;
+            font-size: 22px;
             margin-bottom: 8px;
             color: #fff;
             display: flex;
@@ -174,9 +175,9 @@
 
         .card p {
             color: var(--text-secondary);
-            font-size: 14px;
+            font-size: 16px;
             margin-bottom: 20px;
-            line-height: 1.6;
+            line-height: 1.7;
         }
 
         .form-group {
@@ -185,7 +186,7 @@
 
         .form-group label {
             display: block;
-            font-size: 13px;
+            font-size: 15px;
             font-weight: 500;
             color: var(--text-secondary);
             margin-bottom: 6px;
@@ -193,12 +194,12 @@
 
         .form-group input {
             width: 100%;
-            padding: 12px 14px;
+            padding: 14px 16px;
             border-radius: 10px;
             border: 1px solid var(--border);
             background: var(--bg);
             color: var(--text);
-            font-size: 14px;
+            font-size: 16px;
             outline: none;
             transition: border-color 0.2s;
             font-family: inherit;
@@ -222,10 +223,10 @@
         }
 
         .btn {
-            padding: 12px 28px;
+            padding: 14px 30px;
             border: none;
             border-radius: 100px;
-            font-size: 14px;
+            font-size: 16px;
             font-weight: 600;
             cursor: pointer;
             transition: all 0.2s;
@@ -267,21 +268,21 @@
         .info-box {
             background: var(--info-bg);
             border: 1px solid var(--info-border);
-            padding: 12px 16px;
+            padding: 14px 18px;
             border-radius: 10px;
             color: var(--info-text);
-            font-size: 13px;
+            font-size: 15px;
             margin-bottom: 16px;
-            line-height: 1.5;
+            line-height: 1.6;
         }
 
         .error-box {
             background: var(--error-bg);
             border: 1px solid var(--error-border);
-            padding: 12px 16px;
+            padding: 14px 18px;
             border-radius: 10px;
             color: var(--error-text);
-            font-size: 13px;
+            font-size: 15px;
             margin-bottom: 16px;
             display: none;
         }
@@ -292,12 +293,12 @@
         }
 
         .checklist li {
-            padding: 14px 0;
+            padding: 16px 0;
             border-bottom: 1px solid var(--border);
             display: flex;
             align-items: center;
             gap: 12px;
-            font-size: 14px;
+            font-size: 16px;
             color: var(--text-secondary);
         }
 
@@ -318,7 +319,7 @@
         .skip-link a {
             color: var(--text-muted);
             text-decoration: none;
-            font-size: 13px;
+            font-size: 15px;
             transition: color 0.2s;
         }
 
@@ -332,12 +333,35 @@
             }
 
             .card {
-                padding: 24px;
+                padding: 28px 22px;
             }
 
             .form-row {
                 flex-direction: column;
                 gap: 0;
+            }
+
+            .header h1 {
+                font-size: 26px;
+            }
+
+            .btn-row {
+                flex-direction: column;
+                gap: 10px;
+            }
+
+            .btn-row .btn {
+                width: 100%;
+                text-align: center;
+            }
+
+            .form-group input {
+                padding: 14px;
+                font-size: 16px;
+            }
+
+            .checklist .icon {
+                font-size: 24px;
             }
         }
     </style>
@@ -367,16 +391,45 @@
         <div class="step active" id="step-0">
             <div class="card">
                 <h2><span class="step-num">1</span> Connect WhatsApp</h2>
-                <p>Add your WhatsApp number so tenants can reach you. The AI will triage messages and only alert you
-                    when needed.</p>
-                <div class="info-box">Your WhatsApp number was saved during signup. You can add more numbers below if
-                    you manage properties with partners.</div>
+                <p>Scan the QR code below with WhatsApp on your phone to connect your AI property manager. Open WhatsApp
+                    → Settings → Linked Devices → Link a Device.</p>
+
+                <div id="qrArea" style="text-align:center;margin:20px 0;">
+                    <div id="qrLoading" style="color:var(--text-muted);font-size:15px;padding:40px 0;">
+                        <div style="margin-bottom:12px;">⏳</div>
+                        Initializing WhatsApp connection…
+                    </div>
+                    <div id="qrCodeContainer" style="display:none;">
+                        <div id="qrCodeImg"
+                            style="background:#fff;border-radius:12px;display:inline-block;padding:16px;margin-bottom:12px;">
+                        </div>
+                        <div style="font-size:13px;color:var(--text-muted);">QR code refreshes automatically. Scan
+                            within 45 seconds.</div>
+                    </div>
+                    <div id="qrPairingCode" style="display:none;margin-top:12px;">
+                        <div style="font-size:13px;color:var(--text-secondary);margin-bottom:6px;">Or enter this pairing
+                            code:</div>
+                        <div style="font-size:28px;font-weight:700;letter-spacing:4px;color:var(--accent);"
+                            id="pairingCodeText"></div>
+                    </div>
+                    <div id="qrConnected" style="display:none;padding:32px 0;">
+                        <div style="font-size:48px;margin-bottom:12px;">✅</div>
+                        <div style="font-size:18px;font-weight:600;color:var(--success-text);">WhatsApp Connected!</div>
+                        <div style="font-size:14px;color:var(--text-muted);margin-top:6px;">Your AI property manager is
+                            now linked.</div>
+                    </div>
+                    <div id="qrError" style="display:none;" class="error-box"></div>
+                </div>
+
+                <div class="info-box" id="qrSkipInfo">You can also add your WhatsApp number below if you want to use an
+                    existing Evolution API setup.</div>
                 <div class="form-group">
                     <label>Additional WhatsApp Number (optional)</label>
                     <input type="tel" id="extraPhone" placeholder="+14165559999" />
                 </div>
                 <div class="btn-row">
-                    <span></span>
+                    <button class="btn btn-secondary" id="retryQrBtn" onclick="initWhatsAppQR()" style="display:none;">↻
+                        Retry QR</button>
                     <button class="btn btn-primary" onclick="completeStep(0)">Next →</button>
                 </div>
             </div>
@@ -533,6 +586,124 @@
                 showError(err.message);
             }
         }
+
+        // ── WhatsApp QR Code Logic ─────────────────────────
+        let qrInstanceName = null;
+        let qrPollTimer = null;
+
+        async function initWhatsAppQR() {
+            const loading = document.getElementById('qrLoading');
+            const container = document.getElementById('qrCodeContainer');
+            const pairingEl = document.getElementById('qrPairingCode');
+            const connectedEl = document.getElementById('qrConnected');
+            const errorEl = document.getElementById('qrError');
+            const retryBtn = document.getElementById('retryQrBtn');
+
+            loading.style.display = 'block';
+            container.style.display = 'none';
+            pairingEl.style.display = 'none';
+            connectedEl.style.display = 'none';
+            errorEl.style.display = 'none';
+            retryBtn.style.display = 'none';
+            if (qrPollTimer) clearInterval(qrPollTimer);
+
+            try {
+                // Check if this landlord already has an instance (created during signup)
+                const mine = await API('/admin/whatsapp/instance/mine');
+                if (mine?.instanceName) {
+                    qrInstanceName = mine.instanceName;
+                    if (mine.state === 'open') {
+                        loading.style.display = 'none';
+                        connectedEl.style.display = 'block';
+                        return;
+                    }
+                    // Instance exists but not connected — fetch QR code
+                    await fetchQRCode();
+                    return;
+                }
+
+                // No instance yet — create one (fallback for older accounts)
+                const createResult = await API('/admin/whatsapp/instance/create', {
+                    method: 'POST',
+                    body: JSON.stringify({}),
+                });
+                qrInstanceName = createResult?.instance?.instanceName;
+                if (!qrInstanceName) throw new Error('Failed to create instance');
+
+                // Get QR code
+                await fetchQRCode();
+            } catch (err) {
+                loading.style.display = 'none';
+                errorEl.textContent = err.message || 'Failed to initialize WhatsApp. Check Evolution API config.';
+                errorEl.style.display = 'block';
+                retryBtn.style.display = 'inline-flex';
+            }
+        }
+
+        async function fetchQRCode() {
+            if (!qrInstanceName) return;
+            const loading = document.getElementById('qrLoading');
+            const container = document.getElementById('qrCodeContainer');
+            const pairingEl = document.getElementById('qrPairingCode');
+            const connectedEl = document.getElementById('qrConnected');
+            const errorEl = document.getElementById('qrError');
+            const retryBtn = document.getElementById('retryQrBtn');
+
+            try {
+                const result = await API(`/admin/whatsapp/instance/connect/${encodeURIComponent(qrInstanceName)}`);
+                loading.style.display = 'none';
+
+                if (result?.pairingCode) {
+                    pairingEl.style.display = 'block';
+                    document.getElementById('pairingCodeText').textContent = result.pairingCode;
+                }
+                if (result?.base64) {
+                    container.style.display = 'block';
+                    document.getElementById('qrCodeImg').innerHTML = `<img src="${result.base64}" alt="QR Code" style="width:260px;height:260px;" />`;
+                } else if (result?.code) {
+                    // Generate QR from code string using a canvas-based QR lib
+                    container.style.display = 'block';
+                    document.getElementById('qrCodeImg').innerHTML = `<div style="padding:20px;font-size:13px;color:#333;word-break:break-all;">Use pairing code above to connect.</div>`;
+                }
+
+                // Start polling for connection state
+                if (qrPollTimer) clearInterval(qrPollTimer);
+                qrPollTimer = setInterval(checkConnectionState, 4000);
+            } catch (err) {
+                // Instance might already be connected
+                try {
+                    const state = await API(`/admin/whatsapp/instance/state/${encodeURIComponent(qrInstanceName)}`);
+                    if (state?.instance?.state === 'open') {
+                        loading.style.display = 'none';
+                        connectedEl.style.display = 'block';
+                        if (qrPollTimer) clearInterval(qrPollTimer);
+                        return;
+                    }
+                } catch { }
+                loading.style.display = 'none';
+                errorEl.textContent = err.message || 'Failed to get QR code.';
+                errorEl.style.display = 'block';
+                retryBtn.style.display = 'inline-flex';
+            }
+        }
+
+        async function checkConnectionState() {
+            if (!qrInstanceName) return;
+            try {
+                const state = await API(`/admin/whatsapp/instance/state/${encodeURIComponent(qrInstanceName)}`);
+                if (state?.instance?.state === 'open') {
+                    if (qrPollTimer) clearInterval(qrPollTimer);
+                    document.getElementById('qrLoading').style.display = 'none';
+                    document.getElementById('qrCodeContainer').style.display = 'none';
+                    document.getElementById('qrPairingCode').style.display = 'none';
+                    document.getElementById('qrConnected').style.display = 'block';
+                    document.getElementById('qrError').style.display = 'none';
+                }
+            } catch { }
+        }
+
+        // Auto-init QR on page load
+        initWhatsAppQR();
     </script>
 </body>
 

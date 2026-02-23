@@ -56,8 +56,8 @@
       color: var(--text);
       display: flex;
       min-height: 100vh;
-      font-size: 13px;
-      line-height: 1.5;
+      font-size: 15px;
+      line-height: 1.6;
       -webkit-font-smoothing: antialiased;
     }
 
@@ -114,7 +114,7 @@
 
     .brand strong {
       font-weight: 700;
-      font-size: 14px;
+      font-size: 16px;
       background: var(--gradient);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
@@ -133,12 +133,12 @@
       display: flex;
       align-items: center;
       gap: 10px;
-      padding: 8px 12px;
+      padding: 10px 12px;
       border-radius: var(--radius-sm);
       color: var(--text-muted);
       cursor: pointer;
       text-decoration: none;
-      font-size: 13px;
+      font-size: 15px;
       font-weight: 500;
       transition: all var(--transition);
       border: 1px solid transparent;
@@ -207,7 +207,7 @@
       border: none;
       background: transparent;
       outline: none;
-      font-size: 13px;
+      font-size: 15px;
       color: var(--text);
       font-family: inherit;
     }
@@ -235,9 +235,9 @@
     .btn {
       border: none;
       border-radius: var(--radius-xs);
-      padding: 7px 14px;
+      padding: 9px 16px;
       font-weight: 600;
-      font-size: 12px;
+      font-size: 14px;
       cursor: pointer;
       transition: all var(--transition);
       font-family: inherit;
@@ -335,7 +335,7 @@
     }
 
     .section-header h2 {
-      font-size: 20px;
+      font-size: 24px;
       font-weight: 700;
     }
 
@@ -359,7 +359,7 @@
     }
 
     .panel-header h3 {
-      font-size: 14px;
+      font-size: 16px;
       font-weight: 600;
     }
 
@@ -371,27 +371,65 @@
     /* ── KPI CARDS ── */
     .kpi-grid {
       display: grid;
-      gap: 12px;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 14px;
+      grid-template-columns: repeat(4, 1fr);
     }
 
     .kpi {
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: var(--radius);
-      padding: 16px 20px;
+      padding: 18px 20px;
       display: flex;
       flex-direction: column;
-      gap: 4px;
-      transition: border-color var(--transition);
+      gap: 6px;
+      transition: all .2s ease;
+      cursor: pointer;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .kpi::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: var(--kpi-accent, var(--accent));
+      opacity: 0;
+      transition: opacity .2s ease;
     }
 
     .kpi:hover {
-      border-color: var(--border-light);
+      border-color: var(--kpi-accent, var(--accent));
+      transform: translateY(-2px);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, .3);
+    }
+
+    .kpi:hover::before {
+      opacity: 1;
+    }
+
+    .kpi-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .kpi-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      flex-shrink: 0;
     }
 
     .kpi-label {
-      font-size: 12px;
+      font-size: 13px;
       color: var(--text-muted);
       font-weight: 500;
       display: flex;
@@ -400,14 +438,131 @@
     }
 
     .kpi-value {
-      font-size: 28px;
+      font-size: 32px;
       font-weight: 800;
       letter-spacing: -1px;
+      line-height: 1.1;
     }
 
     .kpi-sub {
+      font-size: 12px;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .kpi-trend {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+
+    .kpi-trend.up {
+      color: var(--success);
+      background: rgba(34, 197, 94, .1);
+    }
+
+    .kpi-trend.down {
+      color: var(--danger);
+      background: rgba(239, 68, 68, .1);
+    }
+
+    .kpi-trend.neutral {
+      color: var(--text-muted);
+      background: var(--surface-2);
+    }
+
+    .kpi-link {
+      font-size: 12px;
+      color: var(--accent);
+      font-weight: 600;
+      opacity: 0;
+      transition: opacity .15s ease;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      margin-top: 2px;
+    }
+
+    .kpi:hover .kpi-link {
+      opacity: 1;
+    }
+
+    /* ── Quick Stats Row ── */
+    .quick-stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 10px;
+    }
+
+    .quick-stat {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .quick-stat-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      flex-shrink: 0;
+    }
+
+    .quick-stat-text {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .quick-stat-value {
+      font-size: 16px;
+      font-weight: 700;
+      line-height: 1.2;
+    }
+
+    .quick-stat-label {
       font-size: 11px;
       color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    /* ── Chart panels ── */
+    .chart-panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      transition: border-color var(--transition);
+    }
+
+    .chart-panel:hover {
+      border-color: var(--border-light);
+    }
+
+    .chart-panel .panel-header {
+      margin-bottom: 12px;
+    }
+
+    .chart-panel canvas {
+      width: 100% !important;
+    }
+
+    @media (max-width: 1200px) {
+      .kpi-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
     }
 
     /* ── STATUS CHIPS ── */
@@ -415,9 +570,9 @@
       display: inline-flex;
       align-items: center;
       gap: 4px;
-      padding: 3px 10px;
+      padding: 4px 12px;
       border-radius: 100px;
-      font-size: 11px;
+      font-size: 13px;
       font-weight: 600;
       border: 1px solid transparent;
     }
@@ -472,9 +627,9 @@
     }
 
     .data-table th {
-      padding: 8px 12px;
+      padding: 10px 14px;
       text-align: left;
-      font-size: 11px;
+      font-size: 12px;
       text-transform: uppercase;
       letter-spacing: .5px;
       color: var(--text-muted);
@@ -483,13 +638,14 @@
       background: var(--bg);
       position: sticky;
       top: 0;
+      white-space: nowrap;
     }
 
     .data-table td {
-      padding: 10px 12px;
+      padding: 12px 14px;
       border-bottom: 1px solid var(--border);
       color: var(--text-secondary);
-      font-size: 13px;
+      font-size: 15px;
     }
 
     .data-table tr:hover td {
@@ -530,7 +686,7 @@
 
       .grid-2,
       .grid-3 {
-        grid-template-columns: 1fr;
+        grid-template-columns: 1fr !important;
       }
     }
 
@@ -563,8 +719,8 @@
     textarea {
       border: 1px solid var(--border);
       border-radius: var(--radius-xs);
-      padding: 8px 10px;
-      font-size: 13px;
+      padding: 10px 12px;
+      font-size: 15px;
       font-family: inherit;
       background: var(--bg);
       color: var(--text);
@@ -656,13 +812,13 @@
     }
 
     .kanban-card-title {
-      font-size: 13px;
+      font-size: 15px;
       font-weight: 600;
       color: var(--text);
     }
 
     .kanban-card-meta {
-      font-size: 11px;
+      font-size: 13px;
       color: var(--text-muted);
       display: flex;
       gap: 8px;
@@ -712,7 +868,7 @@
     }
 
     .drawer-header h3 {
-      font-size: 16px;
+      font-size: 18px;
       font-weight: 700;
     }
 
@@ -760,10 +916,10 @@
 
     .chat-msg {
       max-width: 85%;
-      padding: 8px 12px;
+      padding: 10px 14px;
       border-radius: var(--radius-sm);
-      font-size: 13px;
-      line-height: 1.5;
+      font-size: 15px;
+      line-height: 1.6;
     }
 
     .chat-msg.user {
@@ -842,11 +998,11 @@
 
     .tenant-card-name {
       font-weight: 600;
-      font-size: 14px;
+      font-size: 16px;
     }
 
     .tenant-card-info {
-      font-size: 12px;
+      font-size: 14px;
       color: var(--text-muted);
       display: flex;
       flex-direction: column;
@@ -941,8 +1097,8 @@
     }
 
     .tab-btn {
-      padding: 8px 16px;
-      font-size: 13px;
+      padding: 10px 18px;
+      font-size: 15px;
       font-weight: 500;
       color: var(--text-muted);
       cursor: pointer;
@@ -970,7 +1126,32 @@
       display: block;
     }
 
-    /* ── RESPONSIVE ── */
+    /* ── MOBILE HAMBURGER ── */
+    .mobile-menu-btn {
+      display: none;
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-size: 22px;
+      cursor: pointer;
+      padding: 6px 10px;
+      border-radius: var(--radius-xs);
+      line-height: 1;
+    }
+
+    .sidebar-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, .5);
+      z-index: 19;
+    }
+
+    .sidebar-overlay.open {
+      display: block;
+    }
+
+    /* ── RESPONSIVE: TABLET ── */
     @media (max-width: 960px) {
       .sidebar {
         width: 56px;
@@ -990,14 +1171,446 @@
       .kanban {
         grid-template-columns: 1fr;
       }
+
+      .table-wrap {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+      }
+    }
+
+    /* ── RESPONSIVE: PHONE ── */
+    @media (max-width: 640px) {
+      body {
+        font-size: 16px;
+      }
+
+      .sidebar {
+        width: 260px;
+        transform: translateX(-100%);
+        transition: transform .25s ease;
+        z-index: 25;
+      }
+
+      .sidebar.open {
+        transform: translateX(0);
+      }
+
+      .sidebar .nav-item span,
+      .sidebar .nav-title,
+      .sidebar .brand strong {
+        display: inline;
+      }
+
+      .layout-main {
+        margin-left: 0;
+      }
+
+      .mobile-menu-btn {
+        display: inline-flex;
+      }
+
+      header {
+        padding: 0 12px;
+        gap: 8px;
+      }
+
+      .search {
+        max-width: none;
+        flex: 1;
+      }
+
+      .header-actions {
+        flex-shrink: 0;
+      }
+
+      .header-actions .btn span.hide-mobile {
+        display: none;
+      }
+
+      main {
+        padding: 16px 12px;
+        gap: 16px;
+      }
+
+      .section-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+      }
+
+      .section-header h2 {
+        font-size: 22px;
+      }
+
+      .kpi-grid {
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
+
+      .kpi {
+        padding: 14px;
+      }
+
+      .kpi-value {
+        font-size: 26px;
+      }
+
+      .kpi-icon {
+        width: 34px;
+        height: 34px;
+        font-size: 15px;
+      }
+
+      .kpi-link {
+        opacity: 1;
+      }
+
+      .quick-stats {
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+
+      .grid-2,
+      .grid-3 {
+        grid-template-columns: 1fr;
+      }
+
+      .form-row {
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .form-field {
+        min-width: 100%;
+      }
+
+      .tenant-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .kanban {
+        grid-template-columns: 1fr;
+      }
+
+      .drawer {
+        width: 100vw;
+        max-width: 100vw;
+      }
+
+      .chat-container {
+        height: 350px;
+      }
+
+      .chat-messages {
+        height: 260px !important;
+      }
+
+      .chat-input-row {
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .chat-input-row .btn {
+        width: 100%;
+        justify-content: center;
+      }
+
+      .table-wrap {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+      }
+
+      .data-table {
+        min-width: 600px;
+      }
+
+      .connector-row {
+        flex-wrap: wrap;
+      }
+
+      .panel {
+        padding: 16px;
+      }
+
+      .panel-sm {
+        padding: 14px;
+      }
+
+      .toast {
+        left: 12px;
+        right: 12px;
+        bottom: 12px;
+        text-align: center;
+      }
+    }
+
+    /* ── RESPONSIVE: SMALL PHONE ── */
+    @media (max-width: 380px) {
+      .kpi-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .kpi-value {
+        font-size: 24px;
+      }
+
+      .quick-stats {
+        grid-template-columns: 1fr;
+      }
+
+      header {
+        flex-wrap: wrap;
+      }
+
+      .search {
+        order: 2;
+        flex-basis: 100%;
+      }
+    }
+
+    /* ═══ MOBILE AGENT-CENTRIC SHELL ═══ */
+    .mobile-shell { display: none; }
+    .mobile-section-overlay { display: none; }
+    .approval-modal-backdrop { display: none; }
+
+    @media (max-width: 640px) {
+      /* Hide desktop layout on mobile */
+      .sidebar, .sidebar-overlay, .layout-main { display: none !important; }
+      .mobile-shell { display: flex !important; flex-direction: column; height: 100vh; height: 100dvh; overflow: hidden; background: var(--bg); }
+
+      /* ── Mobile Header ── */
+      .mobile-header {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 0 16px; height: 52px; min-height: 52px;
+        background: var(--surface); border-bottom: 1px solid var(--border);
+        z-index: 10;
+      }
+      .mobile-brand { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 16px; color: var(--text); }
+      .mobile-brand-icon { font-size: 20px; }
+      .mobile-header-actions { display: flex; align-items: center; gap: 8px; }
+      .mobile-header-actions button {
+        background: none; border: none; color: var(--text); font-size: 20px;
+        padding: 6px; cursor: pointer; position: relative; border-radius: var(--radius-sm);
+      }
+      .mobile-header-actions button:active { background: var(--surface-2); }
+      .mobile-notif-badge {
+        position: absolute; top: 0; right: 0; background: var(--danger); color: #fff;
+        font-size: 9px; font-weight: 700; min-width: 14px; height: 14px; line-height: 14px;
+        border-radius: 7px; text-align: center; padding: 0 3px;
+      }
+
+      /* ── Scroll-Snap Panels ── */
+      .mobile-panels {
+        flex: 1; display: flex; overflow-x: auto; overflow-y: hidden;
+        scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+      }
+      .mobile-panels::-webkit-scrollbar { display: none; }
+      .mobile-panel {
+        flex: 0 0 100vw; width: 100vw; min-height: 0;
+        scroll-snap-align: center; scroll-snap-stop: always;
+        overflow-y: auto; padding: 0;
+      }
+
+      /* ── Left Panel: Nav Menu ── */
+      .mobile-nav-panel { background: var(--bg); padding: 20px 16px; }
+      .mobile-nav-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted); margin: 18px 0 8px; }
+      .mobile-nav-title:first-child { margin-top: 4px; }
+      .mobile-nav-item {
+        display: flex; align-items: center; gap: 12px; padding: 13px 14px;
+        border-radius: var(--radius-sm); color: var(--text-secondary);
+        font-size: 15px; font-weight: 500; cursor: pointer; transition: background .15s;
+        text-decoration: none;
+      }
+      .mobile-nav-item:active, .mobile-nav-item:hover { background: var(--surface-2); color: var(--text); }
+      .mobile-nav-item .nav-emoji { font-size: 18px; width: 24px; text-align: center; }
+
+      /* ── Center Panel: Agent Chat ── */
+      .mobile-chat-panel { background: var(--bg); display: flex; flex-direction: column; }
+      .mobile-chat-header {
+        padding: 14px 16px 10px; border-bottom: 1px solid var(--border);
+      }
+      .mobile-chat-header h2 { font-size: 20px; font-weight: 700; color: var(--text); margin: 0; }
+      .mobile-chat-header p { font-size: 12px; color: var(--text-muted); margin: 2px 0 0; }
+      .mobile-chat-messages {
+        flex: 1; overflow-y: auto; padding: 12px 14px;
+        display: flex; flex-direction: column; gap: 8px;
+      }
+      .mobile-chat-messages .chat-msg { max-width: 88%; }
+      .mobile-chat-messages .chat-msg.user { align-self: flex-end; }
+      .mobile-chat-messages .chat-msg.ai { align-self: flex-start; }
+      .mobile-chat-messages .chat-msg > div:first-child {
+        padding: 10px 14px; border-radius: 16px; font-size: 14px; line-height: 1.45;
+        white-space: pre-wrap; word-break: break-word;
+      }
+      .mobile-chat-messages .chat-msg.ai > div:first-child {
+        background: var(--surface-2); color: var(--text); border-bottom-left-radius: 4px;
+      }
+      .mobile-chat-messages .chat-msg.user > div:first-child {
+        background: var(--accent); color: #000; border-bottom-right-radius: 4px;
+      }
+      .mobile-chat-messages .chat-msg .meta {
+        font-size: 10px; color: var(--text-muted); margin-top: 3px; padding: 0 4px;
+      }
+      .mobile-chat-input {
+        display: flex; align-items: flex-end; gap: 8px;
+        padding: 10px 14px; border-top: 1px solid var(--border);
+        background: var(--surface);
+      }
+      .mobile-chat-input textarea {
+        flex: 1; resize: none; border: 1px solid var(--border); border-radius: 20px;
+        padding: 10px 16px; font-size: 15px; font-family: inherit;
+        background: var(--bg); color: var(--text); outline: none;
+        min-height: 42px; max-height: 120px; line-height: 1.4;
+      }
+      .mobile-chat-input textarea:focus { border-color: var(--accent); }
+      .mobile-chat-send {
+        width: 42px; height: 42px; border-radius: 50%;
+        background: var(--accent); color: #000; border: none;
+        font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+        flex-shrink: 0; transition: background .15s;
+      }
+      .mobile-chat-send:active { background: var(--accent-hover); }
+
+      /* ── Right Panel: Mission Control ── */
+      .mobile-mission-panel { background: var(--bg); padding: 16px; }
+      .mobile-mission-panel h2 {
+        font-size: 20px; font-weight: 700; color: var(--text); margin: 0 0 14px;
+      }
+      .mobile-kpi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+      .mobile-kpi {
+        background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+        padding: 14px; display: flex; flex-direction: column; gap: 4px;
+      }
+      .mobile-kpi-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; font-weight: 600; }
+      .mobile-kpi-value { font-size: 26px; font-weight: 800; background: var(--gradient); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+      .mobile-kpi-sub { font-size: 11px; color: var(--text-muted); }
+      .mobile-quick-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px; }
+      .mobile-quick-stat {
+        background: var(--surface); border-radius: var(--radius-sm); padding: 12px;
+        display: flex; flex-direction: column; align-items: center; gap: 2px;
+      }
+      .mobile-quick-stat-value { font-size: 20px; font-weight: 700; color: var(--text); }
+      .mobile-quick-stat-label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; }
+      .mobile-recent-header { font-size: 14px; font-weight: 600; color: var(--text); margin: 16px 0 10px; }
+      .mobile-ticket {
+        background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm);
+        padding: 12px; margin-bottom: 8px; cursor: pointer;
+      }
+      .mobile-ticket:active { background: var(--surface-2); }
+      .mobile-ticket-title { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 3px; }
+      .mobile-ticket-meta { font-size: 11px; color: var(--text-muted); display: flex; gap: 8px; align-items: center; }
+      .mobile-ticket-status {
+        font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 4px;
+        text-transform: uppercase; letter-spacing: .02em;
+      }
+
+      /* ── Dots Indicator ── */
+      .mobile-dots {
+        display: flex; justify-content: center; align-items: center; gap: 8px;
+        padding: 10px 0; background: var(--surface); border-top: 1px solid var(--border);
+      }
+      .mobile-dot {
+        width: 8px; height: 8px; border-radius: 50%;
+        background: var(--surface-3); transition: all .2s;
+      }
+      .mobile-dot.active { width: 20px; border-radius: 4px; background: var(--accent); }
+      .mobile-dot-label {
+        font-size: 10px; color: var(--text-muted); position: absolute;
+        bottom: 22px; left: 50%; transform: translateX(-50%);
+        white-space: nowrap; opacity: 0; transition: opacity .2s;
+      }
+
+      /* ── Section Overlay (full-screen sub-pages) ── */
+      .mobile-section-overlay {
+        position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; height: 100dvh;
+        background: var(--bg); z-index: 100;
+        display: flex; flex-direction: column;
+        transform: translateX(100%); transition: transform .25s ease;
+      }
+      .mobile-section-overlay.open { display: flex; transform: translateX(0); }
+      .mobile-overlay-header {
+        display: flex; align-items: center; gap: 12px;
+        padding: 0 16px; height: 52px; min-height: 52px;
+        background: var(--surface); border-bottom: 1px solid var(--border);
+      }
+      .mobile-overlay-back {
+        background: none; border: none; color: var(--accent); font-size: 14px;
+        font-weight: 600; cursor: pointer; padding: 6px 0; display: flex; align-items: center; gap: 4px;
+      }
+      .mobile-overlay-title { font-size: 16px; font-weight: 600; color: var(--text); }
+      .mobile-overlay-content {
+        flex: 1; overflow-y: auto; padding: 16px;
+      }
+      /* Show section styles normally inside overlay */
+      .mobile-overlay-content .section { display: block !important; padding: 0; }
+      .mobile-overlay-content .section .section-header { margin-bottom: 12px; }
+
+      /* ── Approval Modal ── */
+      .approval-modal-backdrop {
+        position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+        background: rgba(0,0,0,.7); z-index: 200;
+        display: none; align-items: flex-end; justify-content: center;
+      }
+      .approval-modal-backdrop.open { display: flex; }
+      .approval-modal {
+        background: var(--surface); border-radius: 16px 16px 0 0;
+        width: 100%; max-width: 100vw; padding: 20px 16px 24px;
+        animation: slideUp .25s ease;
+      }
+      @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+      .approval-modal-header {
+        display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;
+      }
+      .approval-modal-header h3 { font-size: 16px; font-weight: 600; color: var(--text); }
+      .approval-modal-header button {
+        background: none; border: none; color: var(--text-muted); font-size: 20px; cursor: pointer;
+      }
+      .approval-modal textarea {
+        width: 100%; min-height: 120px; resize: vertical;
+        border: 1px solid var(--border); border-radius: var(--radius-sm);
+        padding: 12px; font-size: 14px; font-family: inherit;
+        background: var(--bg); color: var(--text); outline: none;
+        margin-bottom: 14px;
+      }
+      .approval-modal textarea:focus { border-color: var(--accent); }
+      .approval-modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
+
+      /* ── Mobile Notification Panel ── */
+      .mobile-notif-panel {
+        position: fixed; top: 52px; right: 0; width: 100vw; max-height: 70vh;
+        background: var(--surface); border-bottom: 1px solid var(--border);
+        box-shadow: var(--shadow-lg); z-index: 50;
+        transform: translateY(-100%); transition: transform .25s ease;
+        overflow-y: auto;
+      }
+      .mobile-notif-panel.open { transform: translateY(0); }
+      .mobile-notif-header {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 12px 16px; border-bottom: 1px solid var(--border);
+      }
+      .mobile-notif-header strong { font-size: 15px; color: var(--text); }
+      .mobile-notif-list { padding: 4px 0; }
+      .mobile-notif-item {
+        padding: 12px 16px; border-bottom: 1px solid var(--border);
+        cursor: pointer; transition: background .1s;
+      }
+      .mobile-notif-item:active { background: var(--surface-2); }
+      .mobile-notif-item.unread { background: var(--accent-dim); }
+      .mobile-notif-item-title { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 2px; }
+      .mobile-notif-item-body { font-size: 12px; color: var(--text-secondary); }
+      .mobile-notif-item-time { font-size: 10px; color: var(--text-muted); margin-top: 3px; }
     }
   </style>
 </head>
 
 <body>
 
+  <!-- SIDEBAR OVERLAY (mobile) -->
+  <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
   <!-- ═══ SIDEBAR ═══ -->
-  <nav class="sidebar">
+  <nav class="sidebar" id="sidebar">
     <div class="brand">
       <div class="brand-icon">🏠</div><strong>NestMind AI</strong>
     </div>
@@ -1024,9 +1637,37 @@
   <!-- ═══ MAIN ═══ -->
   <div class="layout-main">
     <header>
+      <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Menu">☰</button>
       <div class="search"><span style="color:var(--text-muted)">🔍</span><input id="globalSearch"
           placeholder="Search tenants, units, tickets..." /></div>
       <div class="header-actions">
+        <!-- Notification Bell -->
+        <div class="notification-bell-wrapper" style="position:relative;display:inline-block;">
+          <button class="btn btn-secondary" id="notificationBell" onclick="toggleNotificationPanel()"
+            title="Notifications" style="position:relative;font-size:18px;padding:6px 10px;">
+            🔔
+            <span id="notifBadge"
+              style="display:none;position:absolute;top:2px;right:2px;background:#ef4444;color:#fff;font-size:10px;font-weight:700;min-width:16px;height:16px;line-height:16px;border-radius:8px;text-align:center;padding:0 4px;">0</span>
+          </button>
+          <!-- Notification Dropdown -->
+          <div id="notificationPanel"
+            style="display:none;position:absolute;right:0;top:42px;width:380px;max-height:480px;background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.18);z-index:1000;overflow:hidden;">
+            <div
+              style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border);">
+              <strong style="font-size:15px;">Notifications</strong>
+              <div style="display:flex;gap:8px;align-items:center;">
+                <button class="btn btn-secondary" style="font-size:11px;padding:3px 8px;"
+                  onclick="markAllNotificationsRead()">Mark all read</button>
+                <button class="btn btn-secondary" style="font-size:11px;padding:3px 8px;"
+                  onclick="enablePushNotifications()">🔔 Enable Push</button>
+              </div>
+            </div>
+            <div id="notificationList" style="max-height:400px;overflow-y:auto;padding:4px 0;">
+              <div style="text-align:center;padding:32px;color:var(--text-muted);font-size:13px;">No notifications yet
+              </div>
+            </div>
+          </div>
+        </div>
         <button class="btn btn-secondary" id="refreshBtn">↻ Refresh</button>
         <button class="btn btn-primary" id="addUnitShortcut">+ New Unit</button>
       </div>
@@ -1046,25 +1687,73 @@
 
         <!-- KPI CARDS -->
         <div class="kpi-grid">
-          <div class="kpi">
-            <div class="kpi-label">🎫 Total Tickets</div>
+          <div class="kpi" style="--kpi-accent:#f59e0b;" onclick="showView('maintenance')">
+            <div class="kpi-top">
+              <div class="kpi-label">Total Tickets</div>
+              <div class="kpi-icon" style="background:rgba(245,158,11,.1);color:#f59e0b;">🎫</div>
+            </div>
             <div class="kpi-value" id="cardIssues">—</div>
             <div class="kpi-sub" id="cardIssuesBreakdown"></div>
+            <div class="kpi-link">View all tickets →</div>
           </div>
-          <div class="kpi">
-            <div class="kpi-label">⏳ Active / Pending</div>
+          <div class="kpi" style="--kpi-accent:#ef4444;" onclick="showView('maintenance')">
+            <div class="kpi-top">
+              <div class="kpi-label">Active / Pending</div>
+              <div class="kpi-icon" style="background:rgba(239,68,68,.1);color:#ef4444;">⏳</div>
+            </div>
             <div class="kpi-value" id="cardPending">—</div>
             <div class="kpi-sub" id="cardPendingBreakdown"></div>
+            <div class="kpi-link">Manage active →</div>
           </div>
-          <div class="kpi">
-            <div class="kpi-label">👥 Tenants</div>
+          <div class="kpi" style="--kpi-accent:#3b82f6;" onclick="showView('tenants')">
+            <div class="kpi-top">
+              <div class="kpi-label">Tenants</div>
+              <div class="kpi-icon" style="background:rgba(59,130,246,.1);color:#3b82f6;">👥</div>
+            </div>
             <div class="kpi-value" id="cardTenants">—</div>
             <div class="kpi-sub" id="cardUnitsTenants"></div>
+            <div class="kpi-link">Manage tenants →</div>
           </div>
-          <div class="kpi">
-            <div class="kpi-label">💰 Utility Spend</div>
+          <div class="kpi" style="--kpi-accent:#22c55e;" onclick="showView('utilities')">
+            <div class="kpi-top">
+              <div class="kpi-label">Utility Spend</div>
+              <div class="kpi-icon" style="background:rgba(34,197,94,.1);color:#22c55e;">💰</div>
+            </div>
             <div class="kpi-value" id="cardUtility">—</div>
             <div class="kpi-sub" id="cardUtilityNotes"></div>
+            <div class="kpi-link">View bills →</div>
+          </div>
+        </div>
+
+        <!-- QUICK STATS ROW -->
+        <div class="quick-stats">
+          <div class="quick-stat" onclick="showView('maintenance')" style="cursor:pointer;">
+            <div class="quick-stat-icon" style="background:rgba(34,197,94,.1);color:#22c55e;">✅</div>
+            <div class="quick-stat-text">
+              <div class="quick-stat-value" id="statResolutionRate">—</div>
+              <div class="quick-stat-label">Resolution Rate</div>
+            </div>
+          </div>
+          <div class="quick-stat" onclick="showView('units')" style="cursor:pointer;">
+            <div class="quick-stat-icon" style="background:rgba(124,92,255,.1);color:#7c5cff;">🏢</div>
+            <div class="quick-stat-text">
+              <div class="quick-stat-value" id="statUnits">—</div>
+              <div class="quick-stat-label">Units Managed</div>
+            </div>
+          </div>
+          <div class="quick-stat" onclick="showView('contractors')" style="cursor:pointer;">
+            <div class="quick-stat-icon" style="background:rgba(245,158,11,.1);color:#f59e0b;">🧰</div>
+            <div class="quick-stat-text">
+              <div class="quick-stat-value" id="statContractors">—</div>
+              <div class="quick-stat-label">Contractors</div>
+            </div>
+          </div>
+          <div class="quick-stat" onclick="showView('reminders')" style="cursor:pointer;">
+            <div class="quick-stat-icon" style="background:rgba(59,130,246,.1);color:#3b82f6;">⏰</div>
+            <div class="quick-stat-text">
+              <div class="quick-stat-value" id="statReminders">—</div>
+              <div class="quick-stat-label">Active Reminders</div>
+            </div>
           </div>
         </div>
 
@@ -1097,35 +1786,56 @@
           </div>
         </div>
 
-        <!-- CHARTS -->
-        <div class="grid-2">
-          <div class="panel panel-sm">
+        <!-- CHARTS ROW 1 — Full-width status + severity -->
+        <div class="grid-3" style="grid-template-columns: 2fr 1fr;">
+          <div class="chart-panel">
             <div class="panel-header">
               <h3>Tickets by Status</h3>
+              <button class="btn btn-ghost btn-sm" onclick="showView('maintenance')">View All →</button>
             </div>
-            <canvas id="chartStatus" height="200"></canvas>
+            <div style="position:relative;height:220px;">
+              <canvas id="chartStatus"></canvas>
+            </div>
           </div>
-          <div class="panel panel-sm">
+          <div class="chart-panel">
             <div class="panel-header">
-              <h3>Activity Feed</h3>
+              <h3>Severity</h3>
             </div>
-            <div id="notifications" style="max-height:240px;overflow-y:auto;display:flex;flex-direction:column;gap:0;">
+            <div style="position:relative;height:220px;">
+              <canvas id="chartSeverity"></canvas>
             </div>
           </div>
         </div>
 
+        <!-- CHARTS ROW 2 -->
         <div class="grid-2">
-          <div class="panel panel-sm">
+          <div class="chart-panel">
             <div class="panel-header">
               <h3>Issues by Unit</h3>
+              <button class="btn btn-ghost btn-sm" onclick="showView('units')">View Units →</button>
             </div>
-            <canvas id="chartUnitIssues" height="180"></canvas>
+            <div style="position:relative;height:200px;">
+              <canvas id="chartUnitIssues"></canvas>
+            </div>
           </div>
-          <div class="panel panel-sm">
+          <div class="chart-panel">
             <div class="panel-header">
               <h3>Utility by Unit</h3>
+              <button class="btn btn-ghost btn-sm" onclick="showView('utilities')">View Bills →</button>
             </div>
-            <canvas id="chartUtility" height="180"></canvas>
+            <div style="position:relative;height:200px;">
+              <canvas id="chartUtility"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <!-- ACTIVITY FEED -->
+        <div class="chart-panel">
+          <div class="panel-header">
+            <h3>Recent Activity</h3>
+            <button class="btn btn-ghost btn-sm" onclick="showView('maintenance')">View All →</button>
+          </div>
+          <div id="notifications" style="max-height:320px;overflow-y:auto;display:flex;flex-direction:column;gap:0;">
           </div>
         </div>
       </section>
@@ -1566,6 +2276,46 @@
         <div class="section-header">
           <h2>WhatsApp Setup</h2>
         </div>
+
+        <!-- QR Code Connection Panel -->
+        <div class="panel panel-sm" id="waConnectionPanel" style="margin-bottom:16px;">
+          <div class="panel-header">
+            <h3>📱 WhatsApp Connection</h3>
+            <span class="chip chip-muted" id="waConnState">Checking…</span>
+          </div>
+          <div id="waQrArea" style="text-align:center;margin:16px 0;">
+            <div id="waQrLoading" style="color:var(--text-muted);font-size:14px;padding:20px 0;display:none;">
+              ⏳ Initializing…
+            </div>
+            <div id="waQrContainer" style="display:none;">
+              <div id="waQrImg"
+                style="background:#fff;border-radius:12px;display:inline-block;padding:14px;margin-bottom:8px;"></div>
+              <div style="font-size:12px;color:var(--text-muted);">Open WhatsApp → Linked Devices → Scan QR</div>
+            </div>
+            <div id="waPairingCode" style="display:none;margin-top:10px;">
+              <div style="font-size:12px;color:var(--text-secondary);margin-bottom:4px;">Or enter pairing code:</div>
+              <div style="font-size:24px;font-weight:700;letter-spacing:3px;color:var(--accent);" id="waPairingText">
+              </div>
+            </div>
+            <div id="waConnected" style="display:none;padding:20px 0;">
+              <div style="font-size:36px;margin-bottom:8px;">✅</div>
+              <div style="font-size:16px;font-weight:600;color:var(--success-text);">WhatsApp Connected</div>
+              <div style="font-size:13px;color:var(--text-muted);margin-top:4px;" id="waConnInfo"></div>
+            </div>
+            <div id="waQrError"
+              style="display:none;background:var(--error-bg);border:1px solid var(--error-border);padding:10px 14px;border-radius:8px;color:var(--error-text);font-size:13px;margin-top:8px;">
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="btn btn-primary btn-sm" id="waConnectBtn" onclick="dashInitQR()">Connect WhatsApp</button>
+            <button class="btn btn-secondary btn-sm" id="waDisconnectBtn" onclick="dashDisconnect()"
+              style="display:none;">Disconnect</button>
+            <button class="btn btn-secondary btn-sm" id="waRestartBtn" onclick="dashRestart()"
+              style="display:none;">Restart</button>
+            <button class="btn btn-secondary btn-sm" id="waRefreshBtn" onclick="dashCheckState()">↻ Refresh</button>
+          </div>
+        </div>
+
         <div class="grid-2">
           <div class="panel panel-sm">
             <div class="panel-header">
@@ -1586,6 +2336,38 @@
             <button class="btn btn-primary btn-sm" id="testWhatsapp">Send Test</button>
             <div style="font-size:12px;color:var(--text-muted);margin-top:6px;" id="whatsappStatus"></div>
           </div>
+        </div>
+
+        <!-- AI Quick Chat (available once WhatsApp connected) -->
+        <div class="panel panel-sm" id="waNestMindChat" style="margin-bottom:16px;display:none;">
+          <div class="panel-header">
+            <h3>💬 AI Assistant Chat</h3>
+            <span class="chip chip-accent">Dashboard Chat</span>
+          </div>
+          <div style="font-size:13px;color:var(--text-muted);margin-bottom:10px;">
+            Chat with your AI agent directly from the dashboard.
+          </div>
+          <div class="chat-container" style="height:250px;">
+            <div class="chat-messages" id="waChatLog" style="max-height:200px;overflow-y:auto;">
+              <div class="chat-msg ai">
+                <div>Hi! I'm your AI assistant. Ask me about maintenance, tenants, or anything related to your
+                  properties.</div>
+              </div>
+            </div>
+            <div class="chat-input-row" style="margin-top:8px;">
+              <textarea id="waChatInput" rows="1" placeholder="Ask AI assistant..."
+                style="flex:1;resize:none;padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;background:var(--surface);color:var(--text-primary);"></textarea>
+              <button class="btn btn-primary btn-sm" id="waChatSendBtn" onclick="sendWaChatMsg()">Send</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Instance & Plan Info -->
+        <div class="panel panel-sm" id="waInstanceInfo" style="margin-bottom:16px;">
+          <div class="panel-header">
+            <h3>📊 Instance Info</h3>
+          </div>
+          <div style="font-size:13px;color:var(--text-secondary);" id="waInstanceDetails">Loading...</div>
         </div>
         <div class="panel panel-sm">
           <div class="panel-header">
@@ -1724,9 +2506,170 @@
             <div style="margin-top:12px;display:flex;gap:8px;" id="acctUpgrade"></div>
           </div>
         </div>
+        <!-- Danger Zone -->
+        <div class="panel" style="margin-top:24px;border:1.5px solid #dc2626;">
+          <div class="panel-header" style="border-bottom-color:#dc2626;">
+            <h3 style="color:#dc2626;">⚠️ Danger Zone</h3>
+          </div>
+          <div style="padding:8px 0;">
+            <p style="color:var(--text-secondary);margin-bottom:12px;">Permanently delete your account and <strong>all
+                associated data</strong> — tenants, units, contractors, maintenance tickets, utility records,
+              conversation history, WhatsApp instances, and settings. <strong>This cannot be undone.</strong></p>
+            <button class="btn" id="deleteAccountBtn" style="background:#dc2626;color:#fff;border:none;">Delete My
+              Account</button>
+          </div>
+        </div>
+
+        <!-- Delete Account Confirmation Modal -->
+        <div id="deleteAccountModal"
+          style="display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,.7);z-index:9999;display:none;align-items:center;justify-content:center;">
+          <div
+            style="background:var(--bg-elevated);border-radius:12px;padding:32px;max-width:440px;width:90%;text-align:center;">
+            <h3 style="color:#dc2626;margin-bottom:12px;">Delete Account Permanently?</h3>
+            <p style="color:var(--text-secondary);margin-bottom:20px;">All your data will be permanently erased. Type
+              <strong>DELETE</strong> below to confirm.
+            </p>
+            <input id="deleteConfirmInput" type="text" placeholder="Type DELETE"
+              style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--bg-card);color:var(--text-primary);margin-bottom:16px;text-align:center;font-size:16px;" />
+            <div style="display:flex;gap:12px;justify-content:center;">
+              <button class="btn btn-secondary" id="deleteAccountCancel">Cancel</button>
+              <button class="btn" id="deleteAccountConfirm" style="background:#dc2626;color:#fff;border:none;"
+                disabled>Delete Forever</button>
+            </div>
+          </div>
+        </div>
       </section>
 
     </main>
+  </div>
+
+  <!-- ═══ MOBILE AGENT-CENTRIC SHELL ═══ -->
+  <div class="mobile-shell" id="mobileShell">
+    <!-- Mobile Header -->
+    <div class="mobile-header">
+      <div class="mobile-brand">
+        <span class="mobile-brand-icon">🏠</span>
+        <span>NestMind AI</span>
+      </div>
+      <div class="mobile-header-actions">
+        <button id="mobileNotifBtn" onclick="toggleMobileNotifPanel()">
+          🔔
+          <span class="mobile-notif-badge" id="mobileNotifBadge" style="display:none;">0</span>
+        </button>
+        <button id="mobileRefreshBtn" onclick="window.location.reload()">↻</button>
+      </div>
+    </div>
+
+    <!-- 3-Panel Swipe Container -->
+    <div class="mobile-panels" id="mobilePanels">
+
+      <!-- LEFT PANEL: Navigation Menu -->
+      <div class="mobile-panel mobile-nav-panel" id="mobileNavPanel">
+        <div class="mobile-nav-title">Overview</div>
+        <a class="mobile-nav-item" data-section="mission"><span class="nav-emoji">📊</span> Dashboard</a>
+        <a class="mobile-nav-item" data-section="maintenance"><span class="nav-emoji">🛠️</span> Maintenance</a>
+        <div class="mobile-nav-title">Manage</div>
+        <a class="mobile-nav-item" data-section="tenants"><span class="nav-emoji">👥</span> Tenants</a>
+        <a class="mobile-nav-item" data-section="units"><span class="nav-emoji">🏢</span> Units</a>
+        <a class="mobile-nav-item" data-section="contractors"><span class="nav-emoji">🧰</span> Contractors</a>
+        <a class="mobile-nav-item" data-section="utilities"><span class="nav-emoji">💡</span> Utilities</a>
+        <div class="mobile-nav-title">AI</div>
+        <a class="mobile-nav-item" data-section="agent"><span class="nav-emoji">🧠</span> AI Agent</a>
+        <a class="mobile-nav-item" data-section="usage"><span class="nav-emoji">📈</span> AI Usage</a>
+        <div class="mobile-nav-title">Settings</div>
+        <a class="mobile-nav-item" data-section="whatsapp"><span class="nav-emoji">💬</span> WhatsApp</a>
+        <a class="mobile-nav-item" data-section="reminders"><span class="nav-emoji">⏰</span> Reminders</a>
+        <a class="mobile-nav-item" data-section="leases"><span class="nav-emoji">📋</span> Leases</a>
+        <a class="mobile-nav-item" data-section="account"><span class="nav-emoji">👤</span> Account</a>
+        <div style="height:16px;"></div>
+        <a class="mobile-nav-item" onclick="logout()" style="color:var(--danger);"><span class="nav-emoji">🚪</span> Logout</a>
+      </div>
+
+      <!-- CENTER PANEL: AI Agent Chat (Home) -->
+      <div class="mobile-panel mobile-chat-panel" id="mobileChatPanel">
+        <div class="mobile-chat-header">
+          <h2>🧠 AI Agent</h2>
+          <p>Powered by Gemini — Ask me anything</p>
+        </div>
+        <div class="mobile-chat-messages" id="mobileAgentChatLog">
+          <div class="chat-msg ai">
+            <div>Hi! I can help with maintenance tickets, tenancy law, drafting replies, checking utilities,
+              <strong>searching the web for product manuals & guides</strong>, and more. Ask me anything.</div>
+          </div>
+        </div>
+        <div class="mobile-chat-input">
+          <textarea id="mobileAgentQuestion" placeholder="Ask anything..." rows="1"></textarea>
+          <button class="mobile-chat-send" id="mobileAgentAskBtn">➤</button>
+        </div>
+      </div>
+
+      <!-- RIGHT PANEL: Mission Control -->
+      <div class="mobile-panel mobile-mission-panel" id="mobileMissionPanel">
+        <h2>📊 Mission Control</h2>
+        <div class="mobile-kpi-grid" id="mobileKpiGrid">
+          <div class="mobile-kpi"><div class="mobile-kpi-label">Total Tickets</div><div class="mobile-kpi-value" id="mKpiTotal">0</div></div>
+          <div class="mobile-kpi"><div class="mobile-kpi-label">Active / Pending</div><div class="mobile-kpi-value" id="mKpiActive">0</div></div>
+          <div class="mobile-kpi"><div class="mobile-kpi-label">Tenants</div><div class="mobile-kpi-value" id="mKpiTenants">0</div></div>
+          <div class="mobile-kpi"><div class="mobile-kpi-label">Utility Spend</div><div class="mobile-kpi-value" id="mKpiUtility">$0</div></div>
+        </div>
+        <div class="mobile-quick-stats" id="mobileQuickStats">
+          <div class="mobile-quick-stat"><div class="mobile-quick-stat-value" id="mStatResolution">0%</div><div class="mobile-quick-stat-label">Resolution</div></div>
+          <div class="mobile-quick-stat"><div class="mobile-quick-stat-value" id="mStatUnits">0</div><div class="mobile-quick-stat-label">Units</div></div>
+          <div class="mobile-quick-stat"><div class="mobile-quick-stat-value" id="mStatContractors">0</div><div class="mobile-quick-stat-label">Contractors</div></div>
+          <div class="mobile-quick-stat"><div class="mobile-quick-stat-value" id="mStatReminders">0</div><div class="mobile-quick-stat-label">Reminders</div></div>
+        </div>
+        <div class="mobile-recent-header">Recent Tickets</div>
+        <div id="mobileRecentTickets">
+          <div style="text-align:center;padding:24px;color:var(--text-muted);font-size:13px;">No tickets yet</div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Dot Indicators -->
+    <div class="mobile-dots" id="mobileDots">
+      <div class="mobile-dot" data-panel="0"></div>
+      <div class="mobile-dot active" data-panel="1"></div>
+      <div class="mobile-dot" data-panel="2"></div>
+    </div>
+  </div>
+
+  <!-- MOBILE NOTIFICATION PANEL -->
+  <div class="mobile-notif-panel" id="mobileNotifPanel">
+    <div class="mobile-notif-header">
+      <strong>Notifications</strong>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-secondary" style="font-size:11px;padding:3px 8px;" onclick="markAllNotificationsRead()">Mark all read</button>
+        <button class="btn btn-secondary" style="font-size:11px;padding:3px 8px;" onclick="enablePushNotifications()">🔔 Push</button>
+      </div>
+    </div>
+    <div class="mobile-notif-list" id="mobileNotifList">
+      <div style="text-align:center;padding:32px;color:var(--text-muted);font-size:13px;">No notifications yet</div>
+    </div>
+  </div>
+
+  <!-- MOBILE SECTION OVERLAY -->
+  <div class="mobile-section-overlay" id="mobileSectionOverlay">
+    <div class="mobile-overlay-header">
+      <button class="mobile-overlay-back" id="mobileOverlayBack" onclick="closeMobileOverlay()">← Back</button>
+      <span class="mobile-overlay-title" id="mobileOverlayTitle"></span>
+    </div>
+    <div class="mobile-overlay-content" id="mobileOverlayContent"></div>
+  </div>
+
+  <!-- APPROVAL MODAL -->
+  <div class="approval-modal-backdrop" id="approvalModalBackdrop">
+    <div class="approval-modal">
+      <div class="approval-modal-header">
+        <h3>Edit & Approve Message</h3>
+        <button onclick="closeApprovalModal()">✕</button>
+      </div>
+      <textarea id="approvalModalText" rows="6" placeholder="Edit message before sending..."></textarea>
+      <div class="approval-modal-actions">
+        <button class="btn btn-secondary" onclick="closeApprovalModal()">Cancel</button>
+        <button class="btn btn-primary" id="approvalModalSend">Send</button>
+      </div>
+    </div>
   </div>
 
   <!-- MAINTENANCE DETAIL DRAWER -->
@@ -1746,6 +2689,17 @@
     Chart.defaults.color = '#71717a';
     Chart.defaults.borderColor = '#27272a';
 
+    /* ── Mobile sidebar toggle ── */
+    const mobileMenuBtn = document.getElementById('mobileMenuBtn');
+    const sidebar = document.getElementById('sidebar');
+    const sidebarOverlay = document.getElementById('sidebarOverlay');
+
+    function openSidebar() { sidebar.classList.add('open'); sidebarOverlay.classList.add('open'); }
+    function closeSidebar() { sidebar.classList.remove('open'); sidebarOverlay.classList.remove('open'); }
+
+    mobileMenuBtn.addEventListener('click', openSidebar);
+    sidebarOverlay.addEventListener('click', closeSidebar);
+
     const navItems = [...document.querySelectorAll('.nav-item[data-target]')];
     const sections = [...document.querySelectorAll('.section')];
     const toastEl = document.getElementById('toast');
@@ -1754,6 +2708,7 @@
     function showView(id) {
       sections.forEach(s => s.classList.toggle('active', s.id === id));
       navItems.forEach(n => n.classList.toggle('active', n.dataset.target === id));
+      closeSidebar();
       if (id === 'agent') setTimeout(populateAgentUnitDropdown, 100);
     }
     navItems.forEach(n => n.addEventListener('click', () => showView(n.dataset.target)));
@@ -2008,12 +2963,25 @@
       document.getElementById('cardIssues').textContent = state.maintenance.length;
       document.getElementById('cardIssuesBreakdown').textContent = active.length + ' active \u00B7 ' + resolved.length + ' resolved';
       document.getElementById('cardPending').textContent = active.length || '0';
-      document.getElementById('cardPendingBreakdown').textContent = active.length ? active.length + ' need attention' : 'All clear';
+      var pendingSub = document.getElementById('cardPendingBreakdown');
+      if (active.length > 0) {
+        pendingSub.innerHTML = '<span class="kpi-trend down">⚠ ' + active.length + ' need attention</span>';
+      } else {
+        pendingSub.innerHTML = '<span class="kpi-trend up">✓ All clear</span>';
+      }
       document.getElementById('cardTenants').textContent = state.tenants.length;
       document.getElementById('cardUnitsTenants').textContent = state.units.length + ' units';
       var totalUtility = state.utilityBills.reduce(function (s, b) { return s + (b.amountCents || 0); }, 0) / 100;
       document.getElementById('cardUtility').textContent = '$' + totalUtility.toFixed(0);
       document.getElementById('cardUtilityNotes').textContent = state.utilityBills.length ? state.utilityBills.length + ' bills tracked' : 'No bills';
+
+      // Quick stats
+      var resRate = state.maintenance.length > 0 ? Math.round((resolved.length / state.maintenance.length) * 100) : 0;
+      document.getElementById('statResolutionRate').textContent = resRate + '%';
+      document.getElementById('statUnits').textContent = state.units.length;
+      document.getElementById('statContractors').textContent = state.contractors.length;
+      var activeReminders = state.reminders.filter(function (r) { return r.active !== false; }).length;
+      document.getElementById('statReminders').textContent = activeReminders;
     }
 
     function renderHealth() {
@@ -2037,8 +3005,22 @@
     }
 
     // ── CHARTS ──
-    var chartStatus, chartUtility, chartUnitIssues;
+    var chartStatus, chartUtility, chartUnitIssues, chartSeverity;
+
+    function timeAgo(dateStr) {
+      var d = new Date(dateStr);
+      var now = new Date();
+      var diff = Math.floor((now - d) / 1000);
+      if (diff < 60) return 'just now';
+      if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+      if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+      if (diff < 604800) return Math.floor(diff / 86400) + 'd ago';
+      return d.toLocaleDateString();
+    }
+
     function renderCharts() {
+      var chartOpts = { responsive: true, maintainAspectRatio: false };
+
       // Status bar chart
       var statuses = ['OPEN', 'PENDING', 'IN_TRIAGE', 'SCHEDULED', 'IN_PROGRESS', 'RESOLVED', 'CANCELLED'];
       var counts = statuses.map(function (s) { return state.maintenance.filter(function (m) { return m.status === s; }).length; });
@@ -2046,8 +3028,23 @@
       if (chartStatus) chartStatus.destroy();
       chartStatus = new Chart(document.getElementById('chartStatus'), {
         type: 'bar',
-        data: { labels: statuses.map(formatStatus), datasets: [{ data: counts, backgroundColor: colors, borderRadius: 4, barThickness: 24 }] },
-        options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, grid: { color: '#27272a' } }, x: { grid: { display: false } } } }
+        data: { labels: statuses.map(formatStatus), datasets: [{ data: counts, backgroundColor: colors, borderRadius: 6, barThickness: 28 }] },
+        options: { ...chartOpts, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 }, grid: { color: '#27272a' } }, x: { grid: { display: false } } }, onClick: function () { showView('maintenance'); } }
+      });
+
+      // Severity doughnut chart
+      var sevLabels = ['low', 'normal', 'high', 'critical', 'unknown'];
+      var sevColors = ['#3b82f6', '#71717a', '#f59e0b', '#ef4444', '#52525b'];
+      var sevCounts = sevLabels.map(function (s) {
+        return state.maintenance.filter(function (m) {
+          return ACTIVE_STATUSES.includes(m.status) && severityOf(m) === s;
+        }).length;
+      });
+      if (chartSeverity) chartSeverity.destroy();
+      chartSeverity = new Chart(document.getElementById('chartSeverity'), {
+        type: 'doughnut',
+        data: { labels: sevLabels.map(function (s) { return s.charAt(0).toUpperCase() + s.slice(1); }), datasets: [{ data: sevCounts, backgroundColor: sevColors, borderWidth: 0, hoverOffset: 6 }] },
+        options: { ...chartOpts, cutout: '60%', plugins: { legend: { position: 'bottom', labels: { color: '#a1a1aa', padding: 10, font: { size: 11 }, usePointStyle: true, pointStyle: 'circle' } } }, onClick: function () { showView('maintenance'); } }
       });
 
       // Utility doughnut
@@ -2056,8 +3053,8 @@
       if (chartUtility) chartUtility.destroy();
       chartUtility = new Chart(document.getElementById('chartUtility'), {
         type: 'doughnut',
-        data: { labels: Object.keys(utilByUnit), datasets: [{ data: Object.values(utilByUnit), backgroundColor: ['#3b82f6', '#00c896', '#7c5cff', '#f59e0b', '#ef4444'], borderWidth: 0 }] },
-        options: { cutout: '65%', plugins: { legend: { position: 'bottom', labels: { color: '#a1a1aa', padding: 12, font: { size: 11 } } } } }
+        data: { labels: Object.keys(utilByUnit), datasets: [{ data: Object.values(utilByUnit), backgroundColor: ['#3b82f6', '#00c896', '#7c5cff', '#f59e0b', '#ef4444', '#6366f1', '#22d3ee'], borderWidth: 0, hoverOffset: 6 }] },
+        options: { ...chartOpts, cutout: '60%', plugins: { legend: { position: 'bottom', labels: { color: '#a1a1aa', padding: 10, font: { size: 11 }, usePointStyle: true, pointStyle: 'circle' } } }, onClick: function () { showView('utilities'); } }
       });
 
       // Issues by unit horizontal bar
@@ -2066,26 +3063,36 @@
       if (chartUnitIssues) chartUnitIssues.destroy();
       chartUnitIssues = new Chart(document.getElementById('chartUnitIssues'), {
         type: 'bar',
-        data: { labels: Object.keys(issuesByUnit), datasets: [{ data: Object.values(issuesByUnit), backgroundColor: '#7c5cff', borderRadius: 4, barThickness: 20 }] },
-        options: { indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, grid: { color: '#27272a' } }, y: { grid: { display: false } } } }
+        data: { labels: Object.keys(issuesByUnit), datasets: [{ data: Object.values(issuesByUnit), backgroundColor: '#7c5cff', borderRadius: 6, barThickness: 22 }] },
+        options: { ...chartOpts, indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, ticks: { stepSize: 1 }, grid: { color: '#27272a' } }, y: { grid: { display: false } } }, onClick: function () { showView('units'); } }
       });
 
-      // Activity feed
+      // Activity feed — improved with relative timestamps and severity chips
       var feed = document.getElementById('notifications');
-      feed.innerHTML = state.maintenance.slice(0, 8).map(function (m) {
+      var items = state.maintenance.slice(0, 10);
+      feed.innerHTML = items.map(function (m) {
         var tenant = resolveTenant(m); var unit = resolveUnit(m);
         var triage = m.triageJson || {};
+        var sev = severityOf(m);
         var summary = (triage.classification && triage.classification.summary) || (triage.summary) || m.message || '';
-        if (summary.length > 100) summary = summary.substring(0, 100) + '\u2026';
-        return '<div style="padding:10px 0;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:flex-start;">' +
-          '<div style="width:8px;height:8px;border-radius:50%;background:' + (ACTIVE_STATUSES.includes(m.status) ? 'var(--accent)' : 'var(--text-muted)') + ';margin-top:5px;flex-shrink:0;"></div>' +
+        if (summary.length > 120) summary = summary.substring(0, 120) + '\u2026';
+        var isActive = ACTIVE_STATUSES.includes(m.status);
+        var sevColor = { low: '#3b82f6', normal: '#71717a', high: '#f59e0b', critical: '#ef4444' }[sev] || '#52525b';
+        return '<div onclick="openDrawer(\'' + m.id + '\')" style="padding:12px 0;border-bottom:1px solid var(--border);display:flex;gap:12px;align-items:flex-start;cursor:pointer;transition:background .15s;" onmouseenter="this.style.background=\'var(--surface-2)\'" onmouseleave="this.style.background=\'transparent\'">' +
+          '<div style="width:10px;height:10px;border-radius:50%;background:' + (isActive ? 'var(--accent)' : 'var(--text-muted)') + ';margin-top:5px;flex-shrink:0;' + (isActive ? 'box-shadow:0 0 6px rgba(0,200,150,.4);' : '') + '"></div>' +
           '<div style="flex:1;min-width:0;">' +
-          '<div style="font-size:13px;font-weight:600;color:var(--text)">' + (tenant.name || '?') + ' \u00B7 ' + (unit.label || '\u2014') + '</div>' +
-          '<div style="font-size:12px;color:var(--text-secondary);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + (summary || 'No details') + '</div>' +
-          '<div style="font-size:11px;color:var(--text-muted);margin-top:2px;">' + formatStatus(m.status) + ' \u00B7 ' + new Date(m.updatedAt || m.createdAt).toLocaleString() + '</div>' +
+          '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">' +
+          '<div style="font-size:14px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + (tenant.name || '?') + ' \u00B7 ' + (unit.label || '\u2014') + '</div>' +
+          '<span style="font-size:11px;color:var(--text-muted);white-space:nowrap;">' + timeAgo(m.updatedAt || m.createdAt) + '</span>' +
+          '</div>' +
+          '<div style="font-size:13px;color:var(--text-secondary);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + (summary || 'No details') + '</div>' +
+          '<div style="display:flex;gap:6px;margin-top:4px;align-items:center;">' +
+          '<span class="chip ' + (isActive ? 'chip-accent' : 'chip-muted') + '" style="font-size:10px;padding:2px 8px;">' + formatStatus(m.status) + '</span>' +
+          '<span style="font-size:10px;font-weight:600;color:' + sevColor + ';background:' + sevColor + '18;padding:2px 8px;border-radius:100px;">' + sev + '</span>' +
+          '</div>' +
           '</div>' +
           '</div>';
-      }).join('') || '<div style="padding:16px;color:var(--text-muted);text-align:center;">No activity yet</div>';
+      }).join('') || '<div style="padding:24px;color:var(--text-muted);text-align:center;">No activity yet<br><span style="font-size:13px;">Tickets will appear here as they come in</span></div>';
     }
 
     function renderUtilities() {
@@ -2353,6 +3360,224 @@
       toast('Bill saved'); loadUtilities();
     });
 
+    // ── WhatsApp QR Code Connection Management ──────────────
+    var dashQrInstance = null;
+    var dashQrPollTimer = null;
+
+    async function dashCheckState() {
+      var stateChip = document.getElementById('waConnState');
+      var connectedEl = document.getElementById('waConnected');
+      var connectBtn = document.getElementById('waConnectBtn');
+      var disconnectBtn = document.getElementById('waDisconnectBtn');
+      var restartBtn = document.getElementById('waRestartBtn');
+      var qrContainer = document.getElementById('waQrContainer');
+      var pairingEl = document.getElementById('waPairingCode');
+      var errorEl = document.getElementById('waQrError');
+
+      try {
+        // Use the per-landlord endpoint first
+        var mine = await fetchJson('/admin/whatsapp/instance/mine');
+        if (!mine?.instanceName) {
+          stateChip.textContent = 'No instance';
+          stateChip.className = 'chip chip-warn';
+          connectBtn.style.display = '';
+          disconnectBtn.style.display = 'none';
+          restartBtn.style.display = 'none';
+          connectedEl.style.display = 'none';
+          return;
+        }
+        dashQrInstance = mine.instanceName;
+        var status = mine.state;
+
+        if (status === 'open') {
+          stateChip.textContent = 'Connected';
+          stateChip.className = 'chip chip-success';
+          connectedEl.style.display = 'block';
+          qrContainer.style.display = 'none';
+          pairingEl.style.display = 'none';
+          var infoEl = document.getElementById('waConnInfo');
+          infoEl.textContent = 'Instance: ' + dashQrInstance;
+          connectBtn.style.display = 'none';
+          disconnectBtn.style.display = '';
+          restartBtn.style.display = '';
+          if (dashQrPollTimer) { clearInterval(dashQrPollTimer); dashQrPollTimer = null; }
+          // Show chat panel when connected
+          document.getElementById('waNestMindChat').style.display = '';
+        } else {
+          stateChip.textContent = status || 'Disconnected';
+          stateChip.className = 'chip chip-warn';
+          connectedEl.style.display = 'none';
+          connectBtn.style.display = '';
+          disconnectBtn.style.display = status === 'close' ? '' : 'none';
+          restartBtn.style.display = '';
+        }
+      } catch (err) {
+        stateChip.textContent = 'Error';
+        stateChip.className = 'chip chip-warn';
+        errorEl.textContent = err.message;
+        errorEl.style.display = 'block';
+      }
+    }
+
+    async function dashInitQR() {
+      var loading = document.getElementById('waQrLoading');
+      var container = document.getElementById('waQrContainer');
+      var pairingEl = document.getElementById('waPairingCode');
+      var connectedEl = document.getElementById('waConnected');
+      var errorEl = document.getElementById('waQrError');
+      var connectBtn = document.getElementById('waConnectBtn');
+      var stateChip = document.getElementById('waConnState');
+
+      loading.style.display = 'block';
+      container.style.display = 'none';
+      pairingEl.style.display = 'none';
+      connectedEl.style.display = 'none';
+      errorEl.style.display = 'none';
+      if (dashQrPollTimer) clearInterval(dashQrPollTimer);
+
+      try {
+        // Check existing instances first
+        var mine = null;
+        try { mine = await fetchJson('/admin/whatsapp/instance/mine'); } catch { }
+
+        if (mine?.state === 'open') {
+          loading.style.display = 'none';
+          connectedEl.style.display = 'block';
+          dashQrInstance = mine.instanceName;
+          dashCheckState();
+          return;
+        }
+
+        if (mine?.instanceName) {
+          dashQrInstance = mine.instanceName;
+        } else {
+          // No instance yet — create one
+          var createResult = await fetchJson('/admin/whatsapp/instance/create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
+          dashQrInstance = createResult?.instance?.instanceName;
+        }
+
+        if (!dashQrInstance) throw new Error('Failed to get instance name');
+
+        // Get QR code
+        var result = await fetchJson('/admin/whatsapp/instance/connect/' + encodeURIComponent(dashQrInstance));
+        loading.style.display = 'none';
+
+        if (result?.pairingCode) {
+          pairingEl.style.display = 'block';
+          document.getElementById('waPairingText').textContent = result.pairingCode;
+        }
+        if (result?.base64) {
+          container.style.display = 'block';
+          document.getElementById('waQrImg').innerHTML = '<img src="' + result.base64 + '" alt="QR" style="width:240px;height:240px;" />';
+        } else {
+          container.style.display = 'block';
+          document.getElementById('waQrImg').innerHTML = '<div style="padding:16px;font-size:13px;color:#333;">Use the pairing code above to connect.</div>';
+        }
+
+        stateChip.textContent = 'Waiting for scan…';
+        stateChip.className = 'chip chip-warn';
+        connectBtn.style.display = 'none';
+
+        // Poll for connection
+        dashQrPollTimer = setInterval(async function () {
+          try {
+            var state = await fetchJson('/admin/whatsapp/instance/state/' + encodeURIComponent(dashQrInstance));
+            if (state?.instance?.state === 'open') {
+              clearInterval(dashQrPollTimer);
+              dashQrPollTimer = null;
+              dashCheckState();
+              toast('WhatsApp connected!');
+            }
+          } catch { }
+        }, 4000);
+
+      } catch (err) {
+        loading.style.display = 'none';
+        errorEl.textContent = err.message || 'Failed to connect. Check Evolution API settings.';
+        errorEl.style.display = 'block';
+        connectBtn.style.display = '';
+      }
+    }
+
+    async function dashDisconnect() {
+      if (!dashQrInstance) return toast('No instance to disconnect');
+      try {
+        await fetchJson('/admin/whatsapp/instance/logout/' + encodeURIComponent(dashQrInstance), { method: 'DELETE' });
+        toast('WhatsApp disconnected');
+        dashCheckState();
+      } catch (err) { toast('Disconnect failed: ' + err.message); }
+    }
+
+    async function dashRestart() {
+      if (!dashQrInstance) return toast('No instance to restart');
+      try {
+        await fetchJson('/admin/whatsapp/instance/restart/' + encodeURIComponent(dashQrInstance), { method: 'PUT' });
+        toast('Instance restarting…');
+        setTimeout(dashCheckState, 3000);
+      } catch (err) { toast('Restart failed: ' + err.message); }
+    }
+
+    // Check WhatsApp state on page load
+    dashCheckState();
+    loadInstanceInfo();
+
+    // ── AI Quick Chat ──
+    document.getElementById('waChatInput').addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendWaChatMsg(); }
+    });
+
+    async function sendWaChatMsg() {
+      var input = document.getElementById('waChatInput');
+      var q = input.value.trim(); if (!q) return;
+      var log = document.getElementById('waChatLog');
+      var userMsg = document.createElement('div');
+      userMsg.className = 'chat-msg user';
+      userMsg.innerHTML = '<div>' + q + '</div><div class="meta">' + new Date().toLocaleTimeString() + '</div>';
+      log.appendChild(userMsg);
+      input.value = '';
+      log.scrollTop = log.scrollHeight;
+
+      var thinking = document.createElement('div');
+      thinking.className = 'chat-msg ai';
+      thinking.innerHTML = '<div style="color:var(--text-muted)">Thinking...</div>';
+      log.appendChild(thinking);
+      log.scrollTop = log.scrollHeight;
+
+      try {
+        var res = await fetchJson('/admin/agent/ask', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question: q }) });
+        var answer = res?.answer || res?.finalAnswer || 'No response.';
+        thinking.innerHTML = '<div>' + answer.replace(/</g, '&lt;').replace(/\n/g, '<br>') + '</div><div class="meta">AI Assistant · ' + new Date().toLocaleTimeString() + '</div>';
+      } catch (err) {
+        thinking.innerHTML = '<div style="color:var(--error-text)">Error: ' + (err.message || 'Failed') + '</div>';
+      }
+      log.scrollTop = log.scrollHeight;
+    }
+
+    async function loadInstanceInfo() {
+      var el = document.getElementById('waInstanceDetails');
+      try {
+        var mine = await fetchJson('/admin/whatsapp/instance/mine');
+        var planInfo = '';
+        try {
+          var plans = await fetchJson('/admin/billing/plans');
+          var profile = await fetchJson('/admin/profile');
+          var plan = plans?.plans?.[profile?.plan || 'FREE'] || {};
+          planInfo = '<br><strong>Plan:</strong> ' + (profile?.plan || 'FREE') + ' — max ' + (plan.maxWhatsAppNumbers || 1) + ' WhatsApp number(s)';
+        } catch { }
+        if (mine?.instanceName) {
+          el.innerHTML = '<strong>Instance:</strong> ' + mine.instanceName + '<br><strong>State:</strong> ' + (mine.state || 'unknown') + planInfo;
+          // Show chat panel if connected
+          if (mine.state === 'open') {
+            document.getElementById('waNestMindChat').style.display = '';
+          }
+        } else {
+          el.innerHTML = 'No instance created yet. Click "Connect WhatsApp" to set up.' + planInfo;
+        }
+      } catch (err) {
+        el.textContent = 'Could not load instance info.';
+      }
+    }
+
     document.getElementById('testWhatsapp').addEventListener('click', async function () {
       try {
         var to = document.getElementById('testWhatsappTo').value.trim();
@@ -2595,10 +3820,20 @@
       }
       if (t.classList.contains('maint-draft-send')) {
         var id = t.dataset.id; var existing = decodeURIComponent(t.dataset.draft || '');
-        var draft = prompt('Edit before sending:', existing) || existing;
-        if (!draft.trim()) return toast('No message');
-        await fetchJson('/maintenance/' + id + '/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role: 'landlord', content: draft }) });
-        toast('Sent'); document.getElementById('maintDrawer').classList.remove('open'); loadMaintenance();
+        // Use approval modal on mobile, prompt on desktop
+        if (window.innerWidth <= 640 && typeof openApprovalModal === 'function') {
+          openApprovalModal(existing).then(function (draft) {
+            if (!draft || !draft.trim()) { toast('No message'); return; }
+            fetchJson('/maintenance/' + id + '/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role: 'landlord', content: draft }) })
+              .then(function () { toast('Sent'); document.getElementById('maintDrawer').classList.remove('open'); loadMaintenance(); })
+              .catch(function (e) { toast('Error: ' + e.message); });
+          });
+        } else {
+          var draft = prompt('Edit before sending:', existing) || existing;
+          if (!draft.trim()) return toast('No message');
+          await fetchJson('/maintenance/' + id + '/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role: 'landlord', content: draft }) });
+          toast('Sent'); document.getElementById('maintDrawer').classList.remove('open'); loadMaintenance();
+        }
       }
       if (t.classList.contains('autopilot-toggle')) {
         var id = t.dataset.id; var enabled = t.dataset.enabled === 'true';
@@ -2860,6 +4095,30 @@
       } catch (err) { toast('Billing unavailable: ' + err.message); }
     }
 
+    // ── Delete Account ──
+    (function () {
+      const modal = document.getElementById('deleteAccountModal');
+      const input = document.getElementById('deleteConfirmInput');
+      const confirmBtn = document.getElementById('deleteAccountConfirm');
+      document.getElementById('deleteAccountBtn').addEventListener('click', function () {
+        modal.style.display = 'flex'; input.value = ''; confirmBtn.disabled = true; input.focus();
+      });
+      document.getElementById('deleteAccountCancel').addEventListener('click', function () { modal.style.display = 'none'; });
+      input.addEventListener('input', function () { confirmBtn.disabled = input.value.trim() !== 'DELETE'; });
+      confirmBtn.addEventListener('click', async function () {
+        confirmBtn.disabled = true; confirmBtn.textContent = 'Deleting...';
+        try {
+          await fetchJson('/admin/account', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ confirm: 'DELETE' }) });
+          localStorage.removeItem('token'); localStorage.removeItem('landlord');
+          alert('Your account has been permanently deleted.');
+          window.location.href = '/login';
+        } catch (err) {
+          toast('Deletion failed: ' + err.message);
+          confirmBtn.textContent = 'Delete Forever'; confirmBtn.disabled = false;
+        }
+      });
+    })();
+
     loadAll();
 
     // ═══════════════════════════════════════════════════════════
@@ -2942,6 +4201,482 @@
         toast('Failed: ' + err.message);
       }
     }
+
+    // ═══════════════════════════════════════════════════════════
+    //  WEBSOCKET — Real-time notifications
+    // ═══════════════════════════════════════════════════════════
+
+    var _ws = null;
+    var _wsReconnectTimer = null;
+    var _notifications = [];
+
+    function connectWebSocket() {
+      var token = document.cookie.split(';').map(function (c) { return c.trim(); }).find(function (c) { return c.startsWith('token='); });
+      if (!token) return;
+      token = token.substring(6);
+      var proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      var url = proto + '//' + location.host + '/ws?token=' + encodeURIComponent(token);
+
+      try { if (_ws) _ws.close(); } catch (e) { }
+
+      _ws = new WebSocket(url);
+
+      _ws.onopen = function () {
+        console.info('[WS] Connected');
+        if (_wsReconnectTimer) { clearTimeout(_wsReconnectTimer); _wsReconnectTimer = null; }
+      };
+
+      _ws.onmessage = function (event) {
+        try {
+          var msg = JSON.parse(event.data);
+          if (msg.type === 'notification') {
+            addNotificationToUI(msg.notification);
+            updateNotifBadge();
+            // Show toast for new notifications
+            toast('🔔 ' + (msg.notification.title || 'New notification'));
+          } else if (msg.type === 'connected') {
+            // Load existing notifications
+            loadNotifications();
+          }
+        } catch (e) { console.warn('[WS] Parse error', e); }
+      };
+
+      _ws.onclose = function () {
+        console.info('[WS] Disconnected, will reconnect...');
+        _wsReconnectTimer = setTimeout(connectWebSocket, 5000);
+      };
+
+      _ws.onerror = function (err) {
+        console.warn('[WS] Error', err);
+      };
+    }
+
+    async function loadNotifications() {
+      try {
+        var data = await fetchJson('/admin/notifications?limit=50');
+        _notifications = data.notifications || [];
+        renderNotifications();
+        updateNotifBadge();
+      } catch (e) { console.warn('Failed to load notifications', e); }
+    }
+
+    function renderNotifications() {
+      var list = document.getElementById('notificationList');
+      if (!_notifications.length) {
+        list.innerHTML = '<div style="text-align:center;padding:32px;color:var(--text-muted);font-size:13px;">No notifications yet</div>';
+        return;
+      }
+      list.innerHTML = _notifications.map(function (n) {
+        var icon = n.type === 'maintenance' ? '🛠️' : n.type === 'approval_request' ? '✅' : n.type === 'contractor' ? '🧰' : n.type === 'lease' ? '📋' : n.type === 'utility' ? '💡' : '📢';
+        var readClass = n.read ? 'opacity:0.6;' : 'font-weight:500;';
+        var time = new Date(n.createdAt).toLocaleString();
+        return '<div style="padding:10px 16px;border-bottom:1px solid var(--border);cursor:pointer;' + readClass + '" onclick="markNotificationRead(\'' + n.id + '\')">' +
+          '<div style="display:flex;align-items:flex-start;gap:8px;">' +
+          '<span style="font-size:16px;">' + icon + '</span>' +
+          '<div style="flex:1;min-width:0;">' +
+          '<div style="font-size:13px;font-weight:600;margin-bottom:2px;">' + (n.title || 'Notification').replace(/</g, '&lt;') + '</div>' +
+          '<div style="font-size:12px;color:var(--text-secondary);white-space:pre-line;word-break:break-word;">' + (n.body || '').replace(/</g, '&lt;').substring(0, 200) + '</div>' +
+          '<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">' + time + '</div>' +
+          '</div>' +
+          (!n.read ? '<span style="width:8px;height:8px;border-radius:50%;background:#3b82f6;flex-shrink:0;margin-top:4px;"></span>' : '') +
+          '</div></div>';
+      }).join('');
+    }
+
+    function updateNotifBadge() {
+      var unread = _notifications.filter(function (n) { return !n.read; }).length;
+      var badge = document.getElementById('notifBadge');
+      if (unread > 0) {
+        badge.textContent = unread > 99 ? '99+' : unread;
+        badge.style.display = '';
+      } else {
+        badge.style.display = 'none';
+      }
+    }
+
+    function toggleNotificationPanel() {
+      var panel = document.getElementById('notificationPanel');
+      panel.style.display = panel.style.display === 'none' ? '' : 'none';
+    }
+
+    // Close notification panel when clicking outside
+    document.addEventListener('click', function (e) {
+      var wrapper = document.querySelector('.notification-bell-wrapper');
+      var panel = document.getElementById('notificationPanel');
+      if (wrapper && !wrapper.contains(e.target) && panel.style.display !== 'none') {
+        panel.style.display = 'none';
+      }
+    });
+
+    async function markNotificationRead(id) {
+      try {
+        await fetchJson('/admin/notifications/' + id + '/read', { method: 'POST' });
+        var n = _notifications.find(function (x) { return x.id === id; });
+        if (n) n.read = true;
+        renderNotifications();
+        updateNotifBadge();
+      } catch (e) { }
+    }
+
+    async function markAllNotificationsRead() {
+      try {
+        await fetchJson('/admin/notifications/read-all', { method: 'POST' });
+        _notifications.forEach(function (n) { n.read = true; });
+        renderNotifications();
+        updateNotifBadge();
+      } catch (e) { toast('Failed to mark as read'); }
+    }
+
+    function addNotificationToUI(notif) {
+      _notifications.unshift(notif);
+      // Keep max 100 in memory
+      if (_notifications.length > 100) _notifications = _notifications.slice(0, 100);
+      renderNotifications();
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    //  BROWSER PUSH NOTIFICATIONS
+    // ═══════════════════════════════════════════════════════════
+
+    async function enablePushNotifications() {
+      if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+        toast('Push notifications not supported in this browser');
+        return;
+      }
+
+      try {
+        // Register service worker
+        var registration = await navigator.serviceWorker.register('/sw.js');
+        console.info('[Push] Service worker registered');
+
+        // Get VAPID key
+        var vapidData = await fetchJson('/admin/push/vapid-key');
+        if (!vapidData.vapidPublicKey) {
+          toast('Push notifications not configured on server');
+          return;
+        }
+
+        // Request permission
+        var permission = await Notification.requestPermission();
+        if (permission !== 'granted') {
+          toast('Notification permission denied');
+          return;
+        }
+
+        // Subscribe
+        var subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(vapidData.vapidPublicKey),
+        });
+
+        // Send subscription to server
+        var subJson = subscription.toJSON();
+        await fetchJson('/admin/push/subscribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            endpoint: subJson.endpoint,
+            keys: subJson.keys,
+          }),
+        });
+
+        toast('🔔 Push notifications enabled!');
+      } catch (err) {
+        console.error('[Push] Setup failed', err);
+        toast('Push setup failed: ' + (err.message || 'Unknown error'));
+      }
+    }
+
+    function urlBase64ToUint8Array(base64String) {
+      var padding = '='.repeat((4 - base64String.length % 4) % 4);
+      var base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+      var rawData = window.atob(base64);
+      var outputArray = new Uint8Array(rawData.length);
+      for (var i = 0; i < rawData.length; ++i) {
+        outputArray[i] = rawData.charCodeAt(i);
+      }
+      return outputArray;
+    }
+
+    // Connect WebSocket on page load
+    connectWebSocket();
+
+    // ═══════════════════════════════════════════════════════════════
+    // ══  MOBILE AGENT-CENTRIC LOGIC
+    // ═══════════════════════════════════════════════════════════════
+    (function initMobile() {
+      var isMobile = function () { return window.innerWidth <= 640; };
+      if (!isMobile()) return; // skip on desktop
+
+      var panels = document.getElementById('mobilePanels');
+      var dots = document.querySelectorAll('.mobile-dot');
+
+      // ── Scroll to center panel (Agent Chat) on load ──
+      requestAnimationFrame(function () {
+        panels.scrollTo({ left: window.innerWidth, behavior: 'instant' });
+      });
+
+      // ── Dot indicator update on scroll ──
+      panels.addEventListener('scroll', function () {
+        var idx = Math.round(panels.scrollLeft / window.innerWidth);
+        dots.forEach(function (d, i) {
+          d.classList.toggle('active', i === idx);
+        });
+      });
+
+      // ── Tap dots to navigate ──
+      dots.forEach(function (d) {
+        d.addEventListener('click', function () {
+          var p = parseInt(d.dataset.panel);
+          panels.scrollTo({ left: p * window.innerWidth, behavior: 'smooth' });
+        });
+      });
+
+      // ── Mobile Agent Chat ──
+      var mobileAskBtn = document.getElementById('mobileAgentAskBtn');
+      var mobileInput = document.getElementById('mobileAgentQuestion');
+      var mobileLog = document.getElementById('mobileAgentChatLog');
+
+      function sendMobileAgentMessage() {
+        var q = mobileInput.value.trim();
+        if (!q) return;
+        // Append user message
+        var userMsg = document.createElement('div');
+        userMsg.className = 'chat-msg user';
+        userMsg.innerHTML = '<div>' + q.replace(/</g, '&lt;') + '</div><div class="meta">' + new Date().toLocaleTimeString() + '</div>';
+        mobileLog.appendChild(userMsg);
+        mobileInput.value = '';
+        mobileInput.style.height = 'auto';
+        mobileLog.scrollTop = mobileLog.scrollHeight;
+
+        // Thinking indicator
+        var thinking = document.createElement('div');
+        thinking.className = 'chat-msg ai';
+        thinking.innerHTML = '<div style="color:var(--text-muted)">Thinking...</div>';
+        mobileLog.appendChild(thinking);
+        mobileLog.scrollTop = mobileLog.scrollHeight;
+
+        fetchJson('/admin/agent/ask', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ question: q })
+        }).then(function (res) {
+          var answer = (res && (res.answer || res.finalAnswer)) || 'No response.';
+          var tools = res && res.toolCallCount ? res.toolCallCount + ' tools used' : '';
+          thinking.innerHTML = '<div style="white-space:pre-wrap">' + answer + '</div><div class="meta">Agent' + (tools ? ' \u00B7 ' + tools : '') + ' \u00B7 ' + new Date().toLocaleTimeString() + '</div>';
+          mobileLog.scrollTop = mobileLog.scrollHeight;
+        }).catch(function (err) {
+          thinking.innerHTML = '<div style="color:var(--danger)">Error: ' + (err.message || 'Unknown') + '</div><div class="meta">' + new Date().toLocaleTimeString() + '</div>';
+          mobileLog.scrollTop = mobileLog.scrollHeight;
+        });
+      }
+
+      mobileAskBtn.addEventListener('click', sendMobileAgentMessage);
+      mobileInput.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMobileAgentMessage(); }
+      });
+
+      // Auto-grow textarea
+      mobileInput.addEventListener('input', function () {
+        this.style.height = 'auto';
+        this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+      });
+
+      // ── Mobile KPI / Mission Control rendering ──
+      window._renderMobileKPIs = function () {
+        var active = state.maintenance.filter(function (m) { return ACTIVE_STATUSES.includes(m.status); });
+        var resolved = state.maintenance.filter(function (m) { return m.status === 'RESOLVED'; });
+        var totalUtility = state.utilityBills.reduce(function (s, b) { return s + (b.amountCents || 0); }, 0) / 100;
+        var resRate = state.maintenance.length > 0 ? Math.round((resolved.length / state.maintenance.length) * 100) : 0;
+
+        // KPI cards
+        var el;
+        el = document.getElementById('mKpiTotal'); if (el) el.textContent = state.maintenance.length;
+        el = document.getElementById('mKpiActive'); if (el) el.textContent = active.length || '0';
+        el = document.getElementById('mKpiTenants'); if (el) el.textContent = state.tenants.length;
+        el = document.getElementById('mKpiUtility'); if (el) el.textContent = '$' + totalUtility.toFixed(0);
+
+        // Quick stats
+        el = document.getElementById('mStatResolution'); if (el) el.textContent = resRate + '%';
+        el = document.getElementById('mStatUnits'); if (el) el.textContent = state.units.length;
+        el = document.getElementById('mStatContractors'); if (el) el.textContent = state.contractors.length;
+        var activeReminders = state.reminders.filter(function (r) { return r.active !== false; }).length;
+        el = document.getElementById('mStatReminders'); if (el) el.textContent = activeReminders;
+
+        // Recent tickets
+        var container = document.getElementById('mobileRecentTickets');
+        if (!container) return;
+        var recent = state.maintenance.slice().sort(function (a, b) {
+          return new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt);
+        }).slice(0, 8);
+
+        if (!recent.length) {
+          container.innerHTML = '<div style="text-align:center;padding:24px;color:var(--text-muted);font-size:13px;">No tickets yet</div>';
+          return;
+        }
+        var statusColors = { OPEN: 'var(--warn)', PENDING: 'var(--info)', IN_TRIAGE: 'var(--accent)', SCHEDULED: 'var(--info)', IN_PROGRESS: 'var(--accent-2)', RESOLVED: 'var(--success)' };
+        container.innerHTML = recent.map(function (m) {
+          var tenant = resolveTenant(m);
+          var unit = resolveUnit(m);
+          var sColor = statusColors[m.status] || 'var(--text-muted)';
+          return '<div class="mobile-ticket" onclick="openMaintDrawer(\'' + m.id + '\')">' +
+            '<div class="mobile-ticket-title">' + (unit.label || 'No unit') + ' — ' + (tenant.name || 'Unknown') + '</div>' +
+            '<div class="mobile-ticket-meta">' +
+            '<span class="mobile-ticket-status" style="background:' + sColor + ';color:#000;">' + formatStatus(m.status) + '</span>' +
+            '<span>' + timeAgo(m.updatedAt || m.createdAt) + '</span>' +
+            '</div></div>';
+        }).join('');
+      };
+
+      // ── Hook into existing render cycle ──
+      var origRenderMissionCards = renderMissionCards;
+      renderMissionCards = function () {
+        origRenderMissionCards();
+        if (typeof _renderMobileKPIs === 'function') _renderMobileKPIs();
+      };
+
+      // ── Nav item clicks → section overlay ──
+      document.querySelectorAll('.mobile-nav-item[data-section]').forEach(function (item) {
+        item.addEventListener('click', function () {
+          var sectionId = item.dataset.section;
+
+          // If tapping Agent, scroll to center panel instead
+          if (sectionId === 'agent') {
+            panels.scrollTo({ left: window.innerWidth, behavior: 'smooth' });
+            return;
+          }
+          // If tapping Dashboard/mission, scroll to right panel
+          if (sectionId === 'mission') {
+            panels.scrollTo({ left: 2 * window.innerWidth, behavior: 'smooth' });
+            return;
+          }
+
+          openMobileOverlay(sectionId);
+        });
+      });
+
+      // ── Mobile notification panel ──
+      window.toggleMobileNotifPanel = function () {
+        var panel = document.getElementById('mobileNotifPanel');
+        panel.classList.toggle('open');
+      };
+
+      // Close mobile notif panel on tap outside
+      document.addEventListener('click', function (e) {
+        var panel = document.getElementById('mobileNotifPanel');
+        var btn = document.getElementById('mobileNotifBtn');
+        if (panel.classList.contains('open') && !panel.contains(e.target) && !btn.contains(e.target)) {
+          panel.classList.remove('open');
+        }
+      });
+
+      // ── Mobile notification rendering ──
+      window._renderMobileNotifications = function () {
+        var list = document.getElementById('mobileNotifList');
+        if (!list) return;
+        if (!_notifications.length) {
+          list.innerHTML = '<div style="text-align:center;padding:32px;color:var(--text-muted);font-size:13px;">No notifications yet</div>';
+        } else {
+          var iconMap = { maintenance: '🛠️', approval_request: '✅', contractor: '🧰', lease: '📋', utility: '💡' };
+          list.innerHTML = _notifications.map(function (n) {
+            var icon = iconMap[n.type] || '📢';
+            return '<div class="mobile-notif-item' + (n.read ? '' : ' unread') + '" onclick="markNotificationRead(\'' + n.id + '\')">' +
+              '<div style="display:flex;gap:8px;align-items:flex-start;">' +
+              '<span style="font-size:16px;">' + icon + '</span>' +
+              '<div style="flex:1;min-width:0;">' +
+              '<div class="mobile-notif-item-title">' + (n.title || 'Notification').replace(/</g, '&lt;') + '</div>' +
+              '<div class="mobile-notif-item-body">' + (n.body || '').replace(/</g, '&lt;').substring(0, 150) + '</div>' +
+              '<div class="mobile-notif-item-time">' + new Date(n.createdAt).toLocaleString() + '</div>' +
+              '</div>' +
+              '</div></div>';
+          }).join('');
+        }
+
+        // Update mobile badge
+        var unread = _notifications.filter(function (n) { return !n.read; }).length;
+        var badge = document.getElementById('mobileNotifBadge');
+        if (badge) {
+          if (unread > 0) { badge.textContent = unread > 99 ? '99+' : unread; badge.style.display = ''; }
+          else { badge.style.display = 'none'; }
+        }
+      };
+
+      // Hook into existing notification render
+      var origRenderNotifications = renderNotifications;
+      renderNotifications = function () {
+        origRenderNotifications();
+        if (typeof _renderMobileNotifications === 'function') _renderMobileNotifications();
+      };
+      var origUpdateBadge = updateNotifBadge;
+      updateNotifBadge = function () {
+        origUpdateBadge();
+        if (typeof _renderMobileNotifications === 'function') _renderMobileNotifications();
+      };
+
+    })(); // end initMobile
+
+    // ── Section Overlay (shared) ──
+    var _overlayReturnSection = null;
+    function openMobileOverlay(sectionId) {
+      var overlay = document.getElementById('mobileSectionOverlay');
+      var content = document.getElementById('mobileOverlayContent');
+      var title = document.getElementById('mobileOverlayTitle');
+      var section = document.getElementById(sectionId);
+      if (!section || !overlay) return;
+
+      // Section title mapping
+      var titles = {
+        mission: 'Dashboard', maintenance: 'Maintenance', tenants: 'Tenants',
+        units: 'Units', contractors: 'Contractors', utilities: 'Utilities',
+        agent: 'AI Agent', usage: 'AI Usage', whatsapp: 'WhatsApp',
+        reminders: 'Reminders', leases: 'Leases', account: 'Account'
+      };
+      title.textContent = titles[sectionId] || sectionId;
+
+      // Clone section content into overlay
+      content.innerHTML = '';
+      var clone = section.cloneNode(true);
+      clone.className = 'section';
+      clone.removeAttribute('id');
+      content.appendChild(clone);
+
+      overlay.classList.add('open');
+      _overlayReturnSection = sectionId;
+    }
+
+    function closeMobileOverlay() {
+      var overlay = document.getElementById('mobileSectionOverlay');
+      if (overlay) overlay.classList.remove('open');
+      _overlayReturnSection = null;
+    }
+
+    // ── Approval Modal (replaces browser prompt for drafts) ──
+    var _approvalResolve = null;
+    function openApprovalModal(existingText) {
+      return new Promise(function (resolve) {
+        _approvalResolve = resolve;
+        var backdrop = document.getElementById('approvalModalBackdrop');
+        var textarea = document.getElementById('approvalModalText');
+        textarea.value = existingText || '';
+        backdrop.classList.add('open');
+        setTimeout(function () { textarea.focus(); }, 100);
+      });
+    }
+
+    function closeApprovalModal() {
+      var backdrop = document.getElementById('approvalModalBackdrop');
+      backdrop.classList.remove('open');
+      if (_approvalResolve) { _approvalResolve(null); _approvalResolve = null; }
+    }
+
+    document.getElementById('approvalModalSend').addEventListener('click', function () {
+      var textarea = document.getElementById('approvalModalText');
+      var text = textarea.value.trim();
+      var backdrop = document.getElementById('approvalModalBackdrop');
+      backdrop.classList.remove('open');
+      if (_approvalResolve) { _approvalResolve(text); _approvalResolve = null; }
+    });
+
   </script>
 </body>
 

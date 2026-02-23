@@ -113,7 +113,7 @@ router.post("/tenants", async (req, res) => {
   if (!process.env.DATABASE_URL) {
     return res.status(503).json({ error: "db_disabled" });
   }
-  const authReq = req as AuthRequest;
+  const authReq = req as unknown as AuthRequest;
   const parsed = tenantSchema.safeParse(req.body || {});
   if (!parsed.success) {
     return res.status(400).json({ error: "validation_failed", details: parsed.error.flatten() });
@@ -136,6 +136,8 @@ router.post("/tenants", async (req, res) => {
 });
 
 router.patch("/tenants/:id", async (req, res) => {
+  const authReq = req as unknown as AuthRequest;
+  if (!(await repo.verifyTenantOwnership(req.params.id, authReq.landlordId))) return res.status(403).json({ error: "forbidden" });
   const parsed = tenantUpdateSchema.safeParse(req.body || {});
   if (!parsed.success) return res.status(400).json({ error: "validation_failed", details: parsed.error.flatten() });
   const updated = await repo.updateTenant({ id: req.params.id, ...parsed.data });
@@ -144,13 +146,15 @@ router.patch("/tenants/:id", async (req, res) => {
 });
 
 router.delete("/tenants/:id", async (req, res) => {
+  const authReq = req as unknown as AuthRequest;
+  if (!(await repo.verifyTenantOwnership(req.params.id, authReq.landlordId))) return res.status(403).json({ error: "forbidden" });
   const deleted = await repo.deleteTenant({ id: req.params.id, hard: req.query?.hard === "true" });
   if (!deleted) return res.status(404).json({ error: "not_found" });
   res.json({ deleted: true });
 });
 
 router.post("/contractors", async (req, res) => {
-  const authReq = req as AuthRequest;
+  const authReq = req as unknown as AuthRequest;
   const parsed = contractorSchema.safeParse(req.body || {});
   if (!parsed.success) {
     return res.status(400).json({ error: "validation_failed", details: parsed.error.flatten() });
@@ -160,6 +164,8 @@ router.post("/contractors", async (req, res) => {
 });
 
 router.patch("/contractors/:id", async (req, res) => {
+  const authReq = req as unknown as AuthRequest;
+  if (!(await repo.verifyContractorOwnership(req.params.id, authReq.landlordId))) return res.status(403).json({ error: "forbidden" });
   const parsed = contractorUpdateSchema.safeParse(req.body || {});
   if (!parsed.success) return res.status(400).json({ error: "validation_failed", details: parsed.error.flatten() });
   const contractor = await repo.updateContractor({ id: req.params.id, ...parsed.data });
@@ -168,12 +174,16 @@ router.patch("/contractors/:id", async (req, res) => {
 });
 
 router.delete("/contractors/:id", async (req, res) => {
+  const authReq = req as unknown as AuthRequest;
+  if (!(await repo.verifyContractorOwnership(req.params.id, authReq.landlordId))) return res.status(403).json({ error: "forbidden" });
   const contractor = await repo.deleteContractor({ id: req.params.id, hard: req.query?.hard === "true" });
   if (!contractor) return res.status(404).json({ error: "not_found" });
   res.json({ deleted: true });
 });
 
 router.patch("/tenants/:id/contact", async (req, res) => {
+  const authReq = req as unknown as AuthRequest;
+  if (!(await repo.verifyTenantOwnership(req.params.id, authReq.landlordId))) return res.status(403).json({ error: "forbidden" });
   const parsed = tenantContactSchema.safeParse(req.body || {});
   if (!parsed.success) {
     return res.status(400).json({ error: "validation_failed", details: parsed.error.flatten() });
@@ -184,19 +194,19 @@ router.patch("/tenants/:id/contact", async (req, res) => {
 });
 
 router.get("/tenants", async (req, res) => {
-  const authReq = req as AuthRequest;
+  const authReq = req as unknown as AuthRequest;
   const tenants = await repo.listTenants(authReq.landlordId);
   res.json({ items: tenants });
 });
 
 router.get("/contractors", async (req, res) => {
-  const authReq = req as AuthRequest;
+  const authReq = req as unknown as AuthRequest;
   const contractors = await repo.listContractors(authReq.landlordId);
   res.json({ items: contractors });
 });
 
 router.post("/units", async (req, res) => {
-  const authReq = req as AuthRequest;
+  const authReq = req as unknown as AuthRequest;
   const parsed = unitSchema.safeParse(req.body || {});
   if (!parsed.success) {
     return res.status(400).json({ error: "validation_failed", details: parsed.error.flatten() });
@@ -211,6 +221,8 @@ router.post("/units", async (req, res) => {
 });
 
 router.patch("/units/:id", async (req, res) => {
+  const authReq = req as unknown as AuthRequest;
+  if (!(await repo.verifyUnitOwnership(req.params.id, authReq.landlordId))) return res.status(403).json({ error: "forbidden" });
   const parsed = unitUpdateSchema.safeParse(req.body || {});
   if (!parsed.success) return res.status(400).json({ error: "validation_failed", details: parsed.error.flatten() });
   const unit = await repo.updateUnit({ id: req.params.id, ...parsed.data });
@@ -219,27 +231,32 @@ router.patch("/units/:id", async (req, res) => {
 });
 
 router.delete("/units/:id", async (req, res) => {
+  const authReq = req as unknown as AuthRequest;
+  if (!(await repo.verifyUnitOwnership(req.params.id, authReq.landlordId))) return res.status(403).json({ error: "forbidden" });
   const unit = await repo.deleteUnit({ id: req.params.id, hard: req.query?.hard === "true" });
   if (!unit) return res.status(404).json({ error: "not_found" });
   res.json({ deleted: true });
 });
 
 router.get("/units", async (req, res) => {
-  const authReq = req as AuthRequest;
+  const authReq = req as unknown as AuthRequest;
   const units = await repo.listUnits(authReq.landlordId);
   res.json({ items: units });
 });
 
 router.post("/utilities/credentials", async (req, res) => {
+  const authReq = req as unknown as AuthRequest;
   const parsed = utilityCredentialSchema.safeParse(req.body || {});
   if (!parsed.success) {
     return res.status(400).json({ error: "validation_failed", details: parsed.error.flatten() });
   }
-  const credential = await repo.createUtilityCredential(parsed.data);
+  const credential = await repo.createUtilityCredential({ ...parsed.data, landlordId: authReq.landlordId });
   res.json({ credential });
 });
 
 router.patch("/utilities/credentials/:id", async (req, res) => {
+  const authReq = req as unknown as AuthRequest;
+  if (!(await repo.verifyUtilityCredentialOwnership(req.params.id, authReq.landlordId))) return res.status(403).json({ error: "forbidden" });
   const parsed = utilityCredentialUpdateSchema.safeParse(req.body || {});
   if (!parsed.success) return res.status(400).json({ error: "validation_failed", details: parsed.error.flatten() });
   const credential = await repo.updateUtilityCredential({ id: req.params.id, ...parsed.data });
@@ -248,6 +265,8 @@ router.patch("/utilities/credentials/:id", async (req, res) => {
 });
 
 router.delete("/utilities/credentials/:id", async (req, res) => {
+  const authReq = req as unknown as AuthRequest;
+  if (!(await repo.verifyUtilityCredentialOwnership(req.params.id, authReq.landlordId))) return res.status(403).json({ error: "forbidden" });
   const credential = await repo.deleteUtilityCredential({ id: req.params.id });
   if (!credential) return res.status(404).json({ error: "not_found" });
   res.json({ deleted: true });
@@ -257,6 +276,9 @@ router.delete("/utilities/credentials/:id", async (req, res) => {
 router.post("/utilities/credentials/:id/fetch-bill", async (req, res) => {
   const authReq = req as unknown as AuthRequest;
   try {
+    // Ownership check
+    if (!(await repo.verifyUtilityCredentialOwnership(req.params.id, authReq.landlordId))) return res.status(403).json({ error: "forbidden" });
+
     // 1. Load credential
     const cred = await db.utilityCredential.findUnique({ where: { id: req.params.id } });
     if (!cred) return res.status(404).json({ error: "Credential not found" });
@@ -619,6 +641,9 @@ router.post("/utilities/credentials/:id/fetch-bill", async (req, res) => {
 // ── 2FA Resume endpoint — send verification code to complete login ──
 router.post("/utilities/credentials/:id/fetch-bill-2fa", async (req, res) => {
   try {
+    const authReq = req as unknown as AuthRequest;
+    if (!(await repo.verifyUtilityCredentialOwnership(req.params.id, authReq.landlordId))) return res.status(403).json({ error: "forbidden" });
+
     const { code, sessionFile } = req.body || {};
     if (!code || !sessionFile) {
       return res.status(400).json({ error: "Verification code and sessionFile are required" });
@@ -746,10 +771,12 @@ router.get("/utilities/bills", async (req, res) => {
 });
 
 router.post("/utilities/bills", async (req, res) => {
+  const authReq = req as unknown as AuthRequest;
   const parsed = utilityBillSchema.safeParse(req.body || {});
   if (!parsed.success) return res.status(400).json({ error: "validation_failed", details: parsed.error.flatten() });
   const bill = await repo.createUtilityBill({
     ...parsed.data,
+    landlordId: authReq.landlordId,
     billingPeriodStart: parsed.data.billingPeriodStart ? new Date(parsed.data.billingPeriodStart) : undefined,
     billingPeriodEnd: parsed.data.billingPeriodEnd ? new Date(parsed.data.billingPeriodEnd) : undefined,
   });
@@ -757,6 +784,8 @@ router.post("/utilities/bills", async (req, res) => {
 });
 
 router.patch("/utilities/bills/:id", async (req, res) => {
+  const authReq = req as unknown as AuthRequest;
+  if (!(await repo.verifyUtilityBillOwnership(req.params.id, authReq.landlordId))) return res.status(403).json({ error: "forbidden" });
   const parsed = utilityBillUpdateSchema.safeParse(req.body || {});
   if (!parsed.success) return res.status(400).json({ error: "validation_failed", details: parsed.error.flatten() });
   const bill = await repo.updateUtilityBill({
@@ -770,6 +799,8 @@ router.patch("/utilities/bills/:id", async (req, res) => {
 });
 
 router.delete("/utilities/bills/:id", async (req, res) => {
+  const authReq = req as unknown as AuthRequest;
+  if (!(await repo.verifyUtilityBillOwnership(req.params.id, authReq.landlordId))) return res.status(403).json({ error: "forbidden" });
   const bill = await repo.deleteUtilityBill({ id: req.params.id });
   if (!bill) return res.status(404).json({ error: "not_found" });
   res.json({ deleted: true });
@@ -786,12 +817,12 @@ router.post("/whatsapp/test", async (req, res) => {
 });
 
 router.get("/landlord-numbers", (req, res) => {
-  const authReq = req as AuthRequest;
+  const authReq = req as unknown as AuthRequest;
   res.json({ numbers: authReq.landlord.whatsappNumbers });
 });
 
 router.post("/landlord-numbers", async (req, res) => {
-  const authReq = req as AuthRequest;
+  const authReq = req as unknown as AuthRequest;
   const numbers = Array.isArray(req.body?.numbers) ? req.body.numbers : typeof req.body?.numbers === "string" ? req.body.numbers.split(",").map((v: string) => v.trim()).filter(Boolean) : [];
   const { db } = require("../config/database");
   await db.landlord.update({ where: { id: authReq.landlordId }, data: { whatsappNumbers: numbers } });
@@ -803,6 +834,8 @@ const statusSchema = z.object({
 });
 
 router.patch("/maintenance/:id/status", async (req, res) => {
+  const authReq = req as unknown as AuthRequest;
+  if (!(await repo.verifyMaintenanceOwnership(req.params.id, authReq.landlordId))) return res.status(403).json({ error: "forbidden" });
   const parsed = statusSchema.safeParse(req.body || {});
   if (!parsed.success) {
     return res.status(400).json({ error: "validation_failed", details: parsed.error.flatten() });
@@ -813,31 +846,33 @@ router.patch("/maintenance/:id/status", async (req, res) => {
 });
 
 router.delete("/maintenance/:id", async (req, res) => {
+  const authReq = req as unknown as AuthRequest;
+  if (!(await repo.verifyMaintenanceOwnership(req.params.id, authReq.landlordId))) return res.status(403).json({ error: "forbidden" });
   const deleted = await repo.deleteMaintenance({ id: req.params.id });
   if (!deleted) return res.status(404).json({ error: "not_found" });
   res.json({ deleted: true });
 });
 
 router.get("/auto-reply", async (req, res) => {
-  const authReq = req as AuthRequest;
+  const authReq = req as unknown as AuthRequest;
   const setting = await repo.getGlobalAutoReplyEnabled(authReq.landlordId);
   res.json({ enabled: setting.enabled, source: setting.source });
 });
 
 router.get("/auto-reply-delay", async (req, res) => {
-  const authReq = req as AuthRequest;
+  const authReq = req as unknown as AuthRequest;
   const setting = await repo.getGlobalAutoReplyDelayMinutes(authReq.landlordId);
   res.json({ minutes: setting.minutes, source: setting.source });
 });
 
 router.get("/auto-reply-cooldown", async (req, res) => {
-  const authReq = req as AuthRequest;
+  const authReq = req as unknown as AuthRequest;
   const setting = await repo.getGlobalAutoReplyCooldownMinutes(authReq.landlordId);
   res.json({ minutes: setting.minutes, source: setting.source });
 });
 
 router.patch("/auto-reply", async (req, res) => {
-  const authReq = req as AuthRequest;
+  const authReq = req as unknown as AuthRequest;
   const schema = z.object({ enabled: z.boolean() });
   const parsed = schema.safeParse(req.body || {});
   if (!parsed.success) return res.status(400).json({ error: "validation_failed", details: parsed.error.flatten() });
@@ -847,7 +882,7 @@ router.patch("/auto-reply", async (req, res) => {
 });
 
 router.patch("/auto-reply-delay", async (req, res) => {
-  const authReq = req as AuthRequest;
+  const authReq = req as unknown as AuthRequest;
   const schema = z.object({ minutes: z.number().min(0).max(120) });
   const parsed = schema.safeParse(req.body || {});
   if (!parsed.success) return res.status(400).json({ error: "validation_failed", details: parsed.error.flatten() });
@@ -857,7 +892,7 @@ router.patch("/auto-reply-delay", async (req, res) => {
 });
 
 router.patch("/auto-reply-cooldown", async (req, res) => {
-  const authReq = req as AuthRequest;
+  const authReq = req as unknown as AuthRequest;
   const schema = z.object({ minutes: z.number().min(0).max(240) });
   const parsed = schema.safeParse(req.body || {});
   if (!parsed.success) return res.status(400).json({ error: "validation_failed", details: parsed.error.flatten() });
@@ -884,7 +919,7 @@ router.get("/webhook-status", (_req, res) => {
 });
 
 router.get("/reminders", async (req, res) => {
-  const authReq = req as AuthRequest;
+  const authReq = req as unknown as AuthRequest;
   const items = await listReminders(authReq.landlordId);
   res.json({ items });
 });
@@ -898,18 +933,22 @@ router.post("/reminders", async (req, res) => {
   });
   const parsed = schema.safeParse(req.body || {});
   if (!parsed.success) return res.status(400).json({ error: "validation_failed", details: parsed.error.flatten() });
-  const authReq = req as AuthRequest;
+  const authReq = req as unknown as AuthRequest;
   const reminder = await addReminder({ id: `rem-${Date.now()}`, landlordId: authReq.landlordId, ...parsed.data });
   res.json({ reminder });
 });
 
 router.delete("/reminders/:id", async (req, res) => {
+  const authReq = req as unknown as AuthRequest;
+  if (!(await repo.verifyReminderOwnership(req.params.id, authReq.landlordId))) return res.status(403).json({ error: "forbidden" });
   const deleted = await deleteReminder(req.params.id);
   if (!deleted) return res.status(404).json({ error: "not_found" });
   res.json({ deleted: true });
 });
 
 router.patch("/reminders/:id", async (req, res) => {
+  const authReq = req as unknown as AuthRequest;
+  if (!(await repo.verifyReminderOwnership(req.params.id, authReq.landlordId))) return res.status(403).json({ error: "forbidden" });
   const active = typeof req.body?.active === "boolean" ? req.body.active : undefined;
   if (active === undefined) return res.status(400).json({ error: "missing_active_flag" });
   const updated = await toggleReminder(req.params.id, active);
@@ -918,6 +957,8 @@ router.patch("/reminders/:id", async (req, res) => {
 });
 
 router.post("/utilities/bills/:id/send-whatsapp", async (req, res) => {
+  const authReq = req as unknown as AuthRequest;
+  if (!(await repo.verifyUtilityBillOwnership(req.params.id, authReq.landlordId))) return res.status(403).json({ error: "forbidden" });
   const number = typeof req.body?.to === "string" ? req.body.to : undefined;
   const statementUrl = typeof req.body?.statementUrl === "string" ? req.body.statementUrl : undefined;
   const text = typeof req.body?.message === "string" ? req.body.message : "Utility bill available";
@@ -931,7 +972,7 @@ router.post("/utilities/bills/:id/send-whatsapp", async (req, res) => {
 // ── Billing / Plans ─────────────────────────────────────
 
 router.post("/billing/checkout", async (req, res) => {
-  const authReq = req as AuthRequest;
+  const authReq = req as unknown as AuthRequest;
   const schema = z.object({ plan: z.enum(["PRO", "ENTERPRISE"]) });
   const parsed = schema.safeParse(req.body || {});
   if (!parsed.success) return res.status(400).json({ error: "validation_failed", details: parsed.error.flatten() });
@@ -943,6 +984,23 @@ router.post("/billing/checkout", async (req, res) => {
 router.get("/billing/plans", (_req, res) => {
   const { PLANS } = require("../services/planService");
   res.json({ plans: PLANS });
+});
+
+// ── Profile ──────────────────────────────────────────────────
+router.get("/profile", async (req, res) => {
+  const authReq = req as unknown as AuthRequest;
+  try {
+    const landlord = await db.landlord.findUnique({
+      where: { id: authReq.landlordId },
+      select: { id: true, email: true, name: true, company: true, phone: true, plan: true, province: true, whatsappNumbers: true, evolutionInstanceName: true, createdAt: true },
+    });
+    if (!landlord) return res.status(404).json({ error: "not_found" });
+    const { PLANS } = require("../services/planService");
+    const planLimits = PLANS[landlord.plan] || PLANS.FREE;
+    res.json({ ...landlord, limits: planLimits });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
 });
 
 // ── Province / RTA ──────────────────────────────────────
@@ -957,7 +1015,7 @@ router.get("/provinces", (_req, res) => {
 
 /** Ask the landlord assistant agent a question (tool-use loop) */
 router.post("/agent/ask", async (req, res) => {
-  const authReq = req as AuthRequest;
+  const authReq = req as unknown as AuthRequest;
   const schema = z.object({
     question: z.string().min(1),
     maintenanceId: z.string().optional(),
@@ -979,7 +1037,7 @@ router.post("/agent/ask", async (req, res) => {
 
 /** Run the utility bill scraper agent */
 router.post("/agent/utility-check", async (req, res) => {
-  const authReq = req as AuthRequest;
+  const authReq = req as unknown as AuthRequest;
   const schema = z.object({
     unitId: z.string().min(1),
     utilityType: z.string().optional(),
@@ -1001,7 +1059,7 @@ router.post("/agent/utility-check", async (req, res) => {
 
 /** Utility chat — conversational utility assistant */
 router.post("/agent/utility-chat", async (req, res) => {
-  const authReq = req as AuthRequest;
+  const authReq = req as unknown as AuthRequest;
   const schema = z.object({
     question: z.string().min(1),
     unitId: z.string().optional(),
@@ -1031,7 +1089,7 @@ router.post("/agent/utility-chat", async (req, res) => {
 
 /** Read and summarize a webpage (mobile browser) */
 router.post("/agent/read-page", async (req, res) => {
-  const authReq = req as AuthRequest;
+  const authReq = req as unknown as AuthRequest;
   const schema = z.object({
     url: z.string().url(),
     question: z.string().optional(),
@@ -1069,7 +1127,7 @@ router.post("/agent/web-search", agentRateLimit, async (req, res) => {
   if (!parsed.success) return res.status(400).json({ error: "validation_failed", details: parsed.error.flatten() });
 
   try {
-    const authReq = req as AuthRequest;
+    const authReq = req as unknown as AuthRequest;
     const landlord = await repo.getLandlordById(authReq.landlordId);
     const plan = (landlord?.plan || "FREE") as "FREE" | "PRO" | "ENTERPRISE";
     const registry = orchestrator.buildToolRegistry(plan);
@@ -1085,7 +1143,7 @@ router.post("/agent/web-search", agentRateLimit, async (req, res) => {
 
 /** List available tools for the current plan */
 router.get("/agent/tools", async (req, res) => {
-  const authReq = req as AuthRequest;
+  const authReq = req as unknown as AuthRequest;
   const landlord = await repo.getLandlordById(authReq.landlordId);
   const plan = (landlord?.plan || "FREE") as "FREE" | "PRO" | "ENTERPRISE";
   const registry = orchestrator.buildToolRegistry(plan);
@@ -1104,7 +1162,7 @@ router.get("/agent/tools", async (req, res) => {
 
 /** Get conversation history for a phone number */
 router.get("/conversations/:phone", async (req: any, res) => {
-  const authReq = req as AuthRequest;
+  const authReq = req as unknown as AuthRequest;
   const limit = Number(req.query.limit) || 30;
   const messages = await conversationMemory.getHistory({
     phone: req.params.phone,
@@ -1120,7 +1178,7 @@ router.get("/conversations/:phone", async (req: any, res) => {
 
 /** Get agent usage stats for the current landlord */
 router.get("/agent/usage", async (req, res) => {
-  const authReq = req as AuthRequest;
+  const authReq = req as unknown as AuthRequest;
   const days = Number(req.query.days) || 30;
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 
@@ -1163,7 +1221,7 @@ router.get("/agent/usage", async (req, res) => {
 router.get("/leases/expiring", async (req, res) => {
   const days = Number(req.query.days) || 60;
   try {
-    const authReq = req as AuthRequest;
+    const authReq = req as unknown as AuthRequest;
     const allLeases = await findExpiringLeases(days);
     // Filter to only this landlord's leases
     const leases = allLeases.filter((l) => l.landlordId === authReq.landlordId);
@@ -1208,7 +1266,7 @@ router.get("/green-button/providers", (_req, res) => {
 
 /** List connections for this landlord */
 router.get("/green-button/connections", async (req, res) => {
-  const authReq = req as AuthRequest;
+  const authReq = req as unknown as AuthRequest;
   try {
     const connections = await db.greenButtonConnection.findMany({
       where: { landlordId: authReq.landlordId },
@@ -1229,7 +1287,7 @@ router.get("/green-button/connections", async (req, res) => {
 
 /** Create a new Green Button connection (initiate OAuth or manual) */
 router.post("/green-button/connections", async (req, res) => {
-  const authReq = req as AuthRequest;
+  const authReq = req as unknown as AuthRequest;
   const schema = z.object({
     provider: z.string().min(1),
     unitId: z.string().min(1),
@@ -1427,7 +1485,7 @@ router.post("/green-button/sync/:connectionId", async (req, res) => {
 
 /** Upload Green Button XML file (Download My Data) */
 router.post("/green-button/upload", async (req, res) => {
-  const authReq = req as AuthRequest;
+  const authReq = req as unknown as AuthRequest;
   const schema = z.object({
     xml: z.string().min(10),
     unitId: z.string().min(1),
@@ -1488,6 +1546,345 @@ router.delete("/green-button/connections/:id", async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });
   }
+});
+
+// ═══════════════════════════════════════════════════════════
+// Evolution API — WhatsApp Instance & QR Code Management
+// ═══════════════════════════════════════════════════════════
+
+function getEvolutionConfig() {
+  return {
+    baseUrl: (process.env.EVOLUTION_API_BASE_URL || "").replace(/\/+$/, ""),
+    token: (process.env.EVOLUTION_API_TOKEN || "").trim(),
+    tokenHeader: (process.env.EVOLUTION_API_TOKEN_HEADER || "apikey").trim(),
+  };
+}
+
+async function evoFetch(path: string, opts: { method?: string; body?: unknown } = {}) {
+  const cfg = getEvolutionConfig();
+  if (!cfg.baseUrl || !cfg.token) throw new Error("Evolution API not configured. Set EVOLUTION_API_BASE_URL and EVOLUTION_API_TOKEN.");
+  const url = `${cfg.baseUrl}${path}`;
+  const res = await fetch(url, {
+    method: opts.method || "GET",
+    headers: {
+      "Content-Type": "application/json",
+      [cfg.tokenHeader]: cfg.token,
+    },
+    body: opts.body ? JSON.stringify(opts.body) : undefined,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error((data as any)?.message || (data as any)?.error || `Evolution API error ${res.status}`);
+  return data;
+}
+
+/** Create a new Evolution API instance (or return existing) for the logged-in landlord */
+router.post("/whatsapp/instance/create", async (req, res) => {
+  const authReq = req as unknown as AuthRequest;
+  const instanceName = req.body?.instanceName || `nestmind-${authReq.landlordId}`;
+  try {
+    // Enforce plan limit on WhatsApp numbers / instances
+    const { PLANS } = require("../services/planService");
+    const landlord = await db.landlord.findUnique({ where: { id: authReq.landlordId }, select: { plan: true, evolutionInstanceName: true, whatsappNumbers: true } });
+    const plan = PLANS[(landlord?.plan || "FREE")] || PLANS.FREE;
+    const currentCount = (landlord?.whatsappNumbers?.length || 0) + (landlord?.evolutionInstanceName ? 1 : 0);
+    // If landlord already has an instance, allow reconnecting it; only block truly new ones.
+    if (landlord?.evolutionInstanceName && landlord.evolutionInstanceName !== instanceName) {
+      if (currentCount >= plan.maxWhatsAppNumbers) {
+        return res.status(403).json({ error: "plan_limit_reached", message: `Your ${landlord.plan || "FREE"} plan allows ${plan.maxWhatsAppNumbers} WhatsApp instance(s). Upgrade to add more.`, max: plan.maxWhatsAppNumbers });
+      }
+    }
+    const webhookUrl = `${process.env.APP_PUBLIC_URL || process.env.APP_URL || req.protocol + "://" + req.get("host")}/webhooks/whatsapp/evolution`;
+    const result = await evoFetch("/instance/create", {
+      method: "POST",
+      body: {
+        instanceName,
+        integration: "WHATSAPP-BAILEYS",
+        qrcode: true,
+        rejectCall: false,
+        groupsIgnore: true, // Ignore group messages — only process direct messages
+        alwaysOnline: true,
+        readMessages: true,
+        readStatus: true,
+        syncFullHistory: false,
+        webhook: {
+          url: webhookUrl,
+          byEvents: false,
+          base64: true,
+          events: [
+            "MESSAGES_UPSERT",
+            "MESSAGES_UPDATE",
+            "CONNECTION_UPDATE",
+            "QRCODE_UPDATED",
+          ],
+        },
+      },
+    });
+    // Save instance name to landlord record
+    if ((result as any)?.instance?.instanceName) {
+      await db.landlord.update({
+        where: { id: authReq.landlordId },
+        data: { evolutionInstanceName: (result as any).instance.instanceName },
+      }).catch(() => { });
+    }
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+/** Get the current landlord's instance name from the DB */
+router.get("/whatsapp/instance/mine", async (req, res) => {
+  const authReq = req as unknown as AuthRequest;
+  try {
+    const landlord = await db.landlord.findUnique({ where: { id: authReq.landlordId }, select: { evolutionInstanceName: true } });
+    if (!landlord?.evolutionInstanceName) return res.json({ instanceName: null });
+    // Also fetch current state
+    let state = "unknown";
+    try {
+      const s = await evoFetch(`/instance/connectionState/${encodeURIComponent(landlord.evolutionInstanceName)}`);
+      state = (s as any)?.instance?.state || "unknown";
+    } catch { }
+    res.json({ instanceName: landlord.evolutionInstanceName, state });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+/** Get QR code / connect an existing instance */
+router.get("/whatsapp/instance/connect/:instanceName", async (req, res) => {
+  const authReq = req as unknown as AuthRequest;
+  const landlord = await db.landlord.findUnique({ where: { id: authReq.landlordId }, select: { evolutionInstanceName: true } });
+  if (landlord?.evolutionInstanceName !== req.params.instanceName) return res.status(403).json({ error: "forbidden" });
+  try {
+    const result = await evoFetch(`/instance/connect/${encodeURIComponent(req.params.instanceName)}`);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+/** Get connection state of an instance */
+router.get("/whatsapp/instance/state/:instanceName", async (req, res) => {
+  const authReq = req as unknown as AuthRequest;
+  const landlord = await db.landlord.findUnique({ where: { id: authReq.landlordId }, select: { evolutionInstanceName: true } });
+  if (landlord?.evolutionInstanceName !== req.params.instanceName) return res.status(403).json({ error: "forbidden" });
+  try {
+    const result = await evoFetch(`/instance/connectionState/${encodeURIComponent(req.params.instanceName)}`);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+/** Fetch all instances (filtered to current landlord if possible) */
+router.get("/whatsapp/instance/list", async (req, res) => {
+  const authReq = req as unknown as AuthRequest;
+  try {
+    const result = await evoFetch("/instance/fetchInstances");
+    // Filter to only this landlord's instance(s)
+    const landlord = await db.landlord.findUnique({ where: { id: authReq.landlordId }, select: { evolutionInstanceName: true } });
+    if (landlord?.evolutionInstanceName && Array.isArray(result)) {
+      const mine = (result as any[]).filter((i: any) => i?.instance?.instanceName === landlord.evolutionInstanceName);
+      return res.json(mine);
+    }
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+/** Logout (disconnect) an instance */
+router.delete("/whatsapp/instance/logout/:instanceName", async (req, res) => {
+  const authReq = req as unknown as AuthRequest;
+  const landlord = await db.landlord.findUnique({ where: { id: authReq.landlordId }, select: { evolutionInstanceName: true } });
+  if (landlord?.evolutionInstanceName !== req.params.instanceName) return res.status(403).json({ error: "forbidden" });
+  try {
+    const result = await evoFetch(`/instance/logout/${encodeURIComponent(req.params.instanceName)}`, { method: "DELETE" });
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+/** Restart an instance */
+router.put("/whatsapp/instance/restart/:instanceName", async (req, res) => {
+  const authReq = req as unknown as AuthRequest;
+  const landlord = await db.landlord.findUnique({ where: { id: authReq.landlordId }, select: { evolutionInstanceName: true } });
+  if (landlord?.evolutionInstanceName !== req.params.instanceName) return res.status(403).json({ error: "forbidden" });
+  try {
+    const result = await evoFetch(`/instance/restart/${encodeURIComponent(req.params.instanceName)}`, { method: "PUT" });
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+/**
+ * Permanently deletes the landlord account and ALL associated data:
+ *  - Tenants, units, contractors, maintenance requests
+ *  - Utility credentials/bills, reminders, conversation history
+ *  - Agent usage, settings, green-button connections
+ *  - Evolution API instances (main + bot)
+ * Requires confirmation body: { confirm: "DELETE" }
+ */
+router.delete("/account", async (req, res) => {
+  const authReq = req as unknown as AuthRequest;
+  if (req.body?.confirm !== "DELETE") {
+    return res.status(400).json({ error: "confirmation_required", message: "Send { confirm: \"DELETE\" } to confirm permanent account deletion." });
+  }
+  try {
+    // 1. Wipe all database records and get instance names
+    const { instanceNames } = await repo.deleteAllLandlordData(authReq.landlordId);
+
+    // 2. Delete Evolution API instances
+    for (const name of instanceNames) {
+      try {
+        await evoFetch(`/instance/logout/${encodeURIComponent(name)}`, { method: "DELETE" });
+      } catch { /* instance may already be gone */ }
+      try {
+        await evoFetch(`/instance/delete/${encodeURIComponent(name)}`, { method: "DELETE" });
+      } catch { /* best effort */ }
+    }
+
+    // 3. Clear auth cookie
+    res.clearCookie("token");
+    res.json({ ok: true, message: "Account and all associated data permanently deleted." });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error("Account deletion failed:", err);
+    res.status(500).json({ error: "deletion_failed", message: (err as Error).message });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════
+//  NOTIFICATIONS — In-app + push notification management
+// ═══════════════════════════════════════════════════════════
+
+/** GET /admin/notifications — List notifications (paginated) */
+router.get("/notifications", async (req, res) => {
+  try {
+    const authReq = req as AuthRequest;
+    const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
+    const offset = parseInt(req.query.offset as string) || 0;
+    const unreadOnly = req.query.unread === "true";
+
+    const where: any = { landlordId: authReq.landlordId };
+    if (unreadOnly) where.read = false;
+
+    const [notifications, total] = await Promise.all([
+      db.notification.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        take: limit,
+        skip: offset,
+      }),
+      db.notification.count({ where }),
+    ]);
+
+    res.json({ notifications, total, limit, offset });
+  } catch (err) {
+    res.status(500).json({ error: "fetch_failed", message: (err as Error).message });
+  }
+});
+
+/** GET /admin/notifications/unread-count — Quick badge count */
+router.get("/notifications/unread-count", async (req, res) => {
+  try {
+    const authReq = req as AuthRequest;
+    const count = await db.notification.count({
+      where: { landlordId: authReq.landlordId, read: false },
+    });
+    res.json({ count });
+  } catch (err) {
+    res.status(500).json({ error: "fetch_failed", message: (err as Error).message });
+  }
+});
+
+/** POST /admin/notifications/:id/read — Mark one notification as read */
+router.post("/notifications/:id/read", async (req, res) => {
+  try {
+    const authReq = req as unknown as AuthRequest;
+    await db.notification.updateMany({
+      where: { id: req.params.id, landlordId: authReq.landlordId },
+      data: { read: true },
+    });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: "update_failed", message: (err as Error).message });
+  }
+});
+
+/** POST /admin/notifications/read-all — Mark all notifications as read */
+router.post("/notifications/read-all", async (req, res) => {
+  try {
+    const authReq = req as AuthRequest;
+    const result = await db.notification.updateMany({
+      where: { landlordId: authReq.landlordId, read: false },
+      data: { read: true },
+    });
+    res.json({ ok: true, updated: result.count });
+  } catch (err) {
+    res.status(500).json({ error: "update_failed", message: (err as Error).message });
+  }
+});
+
+// ── Push subscription management ──
+
+/** POST /admin/push/subscribe — Register a push subscription */
+router.post("/push/subscribe", async (req, res) => {
+  try {
+    const authReq = req as AuthRequest;
+    const { endpoint, keys } = req.body;
+    if (!endpoint || !keys?.p256dh || !keys?.auth) {
+      return res.status(400).json({ error: "Invalid push subscription data" });
+    }
+
+    await db.pushSubscription.upsert({
+      where: {
+        landlordId_endpoint: {
+          landlordId: authReq.landlordId,
+          endpoint,
+        },
+      },
+      create: {
+        landlordId: authReq.landlordId,
+        endpoint,
+        p256dh: keys.p256dh,
+        auth: keys.auth,
+      },
+      update: {
+        p256dh: keys.p256dh,
+        auth: keys.auth,
+      },
+    });
+
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: "subscribe_failed", message: (err as Error).message });
+  }
+});
+
+/** DELETE /admin/push/unsubscribe — Remove a push subscription */
+router.delete("/push/unsubscribe", async (req, res) => {
+  try {
+    const authReq = req as AuthRequest;
+    const { endpoint } = req.body;
+    if (!endpoint) return res.status(400).json({ error: "endpoint required" });
+
+    await db.pushSubscription.deleteMany({
+      where: { landlordId: authReq.landlordId, endpoint },
+    });
+
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: "unsubscribe_failed", message: (err as Error).message });
+  }
+});
+
+/** GET /admin/push/vapid-key — Return the public VAPID key for pusher registration */
+router.get("/push/vapid-key", (_req, res) => {
+  const key = process.env.VAPID_PUBLIC_KEY || "";
+  res.json({ vapidPublicKey: key });
 });
 
 export default router;
